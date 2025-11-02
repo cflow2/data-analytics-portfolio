@@ -1,2 +1,2 @@
-# data-analytics-portfolio
-Power BI, SQL, and Python analytics projects highlighting KPI dashboards, predictive modeling, and data storytelling across retail, healthcare, and operations.
+# Curtis Flowers — Data Analytics Portfolio
+A collection of data analytics projects showcasing Power BI dashboards, SQL analysis, and Python modeling across retail, healthcare, and operations domains.
