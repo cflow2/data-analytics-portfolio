@@ -1,0 +1,102 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/space-grotesk/latin-500.css';
+@import '@fontsource/space-grotesk/latin-600.css';
+@import '@fontsource/space-grotesk/latin-700.css';
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* Design tokens. Light theme is the source; dark is derived from it. */
+:root {
+  --c-ink: #12233f;
+  --c-muted: #4a5568;
+  --c-bg: #f6f7f9;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0f2f5;
+  --c-border: #dce1e8;
+  --c-calls: #0d4e9e;
+  --c-calls-soft: #e3ecf8;
+  --c-surveys: #b8560f;
+  --c-surveys-bar: #e07a1f;
+  --c-surveys-soft: #fbeadb;
+  --c-grow: #1f7a5a;
+  --c-grow-soft: #dff1e9;
+  --c-watch: #f2d9a6;
+  --c-watch-ink: #5c3d00;
+  --c-act: #b8560f;
+  --c-stable: #e6e9ee;
+  --c-focus: #0d4e9e;
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  --c-ink: #e7ecf4;
+  --c-muted: #a6b1c2;
+  --c-bg: #0d1524;
+  --c-surface: #142036;
+  --c-surface-2: #1b2943;
+  --c-border: #2a3a57;
+  --c-calls: #7fb0f0;
+  --c-calls-soft: #16304f;
+  --c-surveys: #f2a160;
+  --c-surveys-bar: #e07a1f;
+  --c-surveys-soft: #3b2614;
+  --c-grow: #6fcfa8;
+  --c-grow-soft: #133a2d;
+  --c-watch: #f2d9a6;
+  --c-watch-ink: #3d2900;
+  --c-act: #f2a160;
+  --c-stable: #2a3a57;
+  --c-focus: #7fb0f0;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-ink: var(--c-ink);
+  --color-muted: var(--c-muted);
+  --color-bg: var(--c-bg);
+  --color-surface: var(--c-surface);
+  --color-surface-2: var(--c-surface-2);
+  --color-border: var(--c-border);
+  --color-calls: var(--c-calls);
+  --color-calls-soft: var(--c-calls-soft);
+  --color-surveys: var(--c-surveys);
+  --color-surveys-bar: var(--c-surveys-bar);
+  --color-surveys-soft: var(--c-surveys-soft);
+  --color-grow: var(--c-grow);
+  --color-grow-soft: var(--c-grow-soft);
+  --color-watch: var(--c-watch);
+  --color-watch-ink: var(--c-watch-ink);
+  --color-act: var(--c-act);
+  --color-stable: var(--c-stable);
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, sans-serif;
+  /* Five-step type scale: 32 / 24 / 18 / 14 / 12 */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-lg: 18px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --radius-card: 12px;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+  -webkit-font-smoothing: antialiased;
+}
+.tnum { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--c-focus); outline-offset: 2px; border-radius: 4px; }
+* { transition-duration: 0ms; }
+.motion { transition: all 175ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .motion, .animate-pulse { transition: none !important; animation: none !important; }
+}
+.presentation { font-size: 16px; }
+.presentation h1 { font-size: 32px; }
