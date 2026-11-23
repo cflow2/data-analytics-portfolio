@@ -96,17 +96,33 @@ export function demoFiles(d: DemoData = generateDemoData()): DemoFile[] {
     ]]]),
   });
 
-  // 3. Medallia Analytics driver report (long layout)
-  const analytics: unknown[][] = [['FW', 'Attribute', 'Top 2 Box %', 'n']];
-  for (let fw = 36; fw <= 40; fw++) {
-    const ws = d.surveys.filter((s) => s.fw === fw);
-    for (const a of ATTRIBUTES) {
-      const vals = ws.map((s) => s.attrs?.[a.key]).filter((v): v is number => v !== undefined);
-      const top = vals.filter((v) => v >= 9).length;
-      analytics.push([`FW${fw}`, a.label, Number(((100 * top) / vals.length).toFixed(1)), vals.length]);
-    }
-  }
-  files.push({ name: 'Analytics_Driver_Report_DEMO.xlsx', data: book([['Drivers', analytics]]) });
+  // 3. Medallia Analytics driver report — real layout: FW40 split by days, labels as Medallia shows them.
+  const MEDALLIA_LABEL: Record<string, string> = {
+    value: 'Project Value', scheduling: 'Ease of Scheduling Your Project', quality: 'Project Quality',
+    timeToAppt: 'Amount of Time It Took to Complete Your Project', processPrior: 'Ease of Process',
+    overall: 'The Overall HomeCare+ Subscription', craftsmanship: 'Craftsmanship', professionalism: 'Professionalism', knowledge: 'Knowledge',
+  };
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart(40), i));
+  const dayHdr = (d: ISODate) => `${+d.slice(8)} ${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][new Date(d + 'T12:00:00Z').getUTCDay()]}`;
+  const onDay = (d: ISODate) => d40.filter((x) => x.date === d);
+  const d40 = d.surveys.filter((x) => x.fw === 40);
+  const t2b = (vals: (number | undefined | null)[]) => { const v = vals.filter((x): x is number => typeof x === 'number'); return v.length ? Number(((100 * v.filter((x) => x >= 9).length) / v.length).toFixed(5)) : null; };
+  const measureRow = (label: string, pick: (x: SurveyRecord) => number | null | undefined) =>
+    [label, ...days.map((day) => t2b(onDay(day).map(pick))), t2b(d40.map(pick)), 100];
+  files.push({
+    name: 'Analytics - 2026-11-09T101500.000.xlsx',
+    data: book([['Sheet0', [
+      [null, ...days.map(dayHdr), 'Total', 'Benchmark'],
+      ['Sample Size', ...days.map((day) => onDay(day).length), d40.length, 1],
+      measureRow('Likelihood to Recommend (LTR)', (x) => x.ltr),
+      [],
+      ['Drivers of LTR'],
+      ...ATTRIBUTES.filter((a) => !['craftsmanship', 'professionalism', 'knowledge'].includes(a.key)).map((a) => measureRow(MEDALLIA_LABEL[a.key], (x) => x.attrs?.[a.key])),
+      [],
+      ['HomeCare+ Associate'],
+      ...['craftsmanship', 'professionalism', 'knowledge'].map((k) => measureRow(MEDALLIA_LABEL[k], (x) => x.attrs?.[k as keyof NonNullable<SurveyRecord['attrs']>])),
+    ]]]),
+  });
 
   // 4. Customer Commentary (header on row 2)
   files.push({

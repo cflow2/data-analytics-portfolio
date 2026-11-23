@@ -8,6 +8,7 @@ import type { ParsedFile, ParseRequest, ValidationReport } from '@/ingest/types'
 import type { Candidate, ColumnMapping } from '@/ingest/specs';
 import { getRedactionRules, getRememberedMappings, getSalt, rememberMapping } from './privacy';
 import { useSettings } from './settings';
+import { todayISO } from '@/lib/dates';
 
 export type StageStatus = 'parsing' | 'needs-mapping' | 'ready' | 'importing' | 'imported' | 'error';
 
@@ -37,7 +38,7 @@ interface ImportState {
 
 async function request(name: string, buffer: ArrayBuffer, force?: ParseRequest['force']): Promise<ParseRequest> {
   const [rules, salt, remembered] = await Promise.all([getRedactionRules(), getSalt(), getRememberedMappings()]);
-  return { fileId: hashBytes(buffer), name, buffer: buffer.slice(0), fyStart: useSettings.getState().fyStart, rules, salt, remembered, force };
+  return { fileId: hashBytes(buffer), name, buffer: buffer.slice(0), fyStart: useSettings.getState().fyStart, rules, salt, remembered, force, today: todayISO() };
 }
 
 function statusFor(p: ParsedFile): StageStatus {

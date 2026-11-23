@@ -202,6 +202,15 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
       if (hasFollowups || b.kind === 'followup') report.followupCheck.push(await followupCheck(w, database));
     }
   }
+  if (b.kind === 'medallia-analytics') {
+    report.medalliaLtrCheck = [];
+    for (const m of b.attributeWeekly.filter((a) => a.attr === 'ltr')) {
+      const t = (await database.surveys.where('fw').equals(m.fw).toArray()).filter(countsForLtr);
+      const valid = t.filter((x) => x.ltr !== null);
+      const prom = valid.filter((x) => x.ltr! >= 9).length;
+      report.medalliaLtrCheck.push({ fw: m.fw, medalliaPct: m.pct, medalliaN: m.n, trackerPct: valid.length ? (100 * prom) / valid.length : null, trackerN: valid.length });
+    }
+  }
   if (surveyStoreNos.size) {
     const st = await database.stores.bulkGet([...surveyStoreNos]);
     report.unmappedStores = [...surveyStoreNos].filter((_, i) => !st[i]?.district).sort();

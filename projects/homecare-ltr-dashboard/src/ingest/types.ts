@@ -26,6 +26,8 @@ export interface ValidationReport {
   fwMismatches?: number;
   noScore?: number;
   followupCheck?: FollowUpCheck[];
+  /** Medallia Analytics LTR vs Tracker LTR for the same week (the Tracker is the source of truth). */
+  medalliaLtrCheck?: { fw: number; medalliaPct: number; medalliaN: number; trackerPct: number | null; trackerN: number }[];
   unmappedStores?: string[];
   storesFromSheets?: number;
   redactions: Record<string, number>;
@@ -65,6 +67,8 @@ export interface ParseRequest {
   rules: RedactionRule[];
   salt: string;
   remembered: Partial<Record<string, ColumnMapping>>;
+  /** Fallback date for undated day columns ("14 Sat") when the file name has no export timestamp. */
+  today?: ISODate;
   /** Force a kind / sheet / header row / mapping (from the mapping dialog). */
   force?: { kind: Candidate['kind']; sheet: string; headerIndex: number; mapping: ColumnMapping };
 }

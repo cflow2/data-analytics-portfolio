@@ -20,15 +20,15 @@ export interface KindSpec {
 }
 
 const ATTR_FIELDS: (FieldSpec & { key: AttributeKey })[] = [
-  { key: 'value', label: 'Value for money', required: false, aliases: ['value for money'], contains: [['value', 'money']] },
+  { key: 'value', label: 'Value for money', required: false, aliases: ['value for money', 'project value'], contains: [['value', 'money']] },
   { key: 'scheduling', label: 'Ease of scheduling', required: false, aliases: ['ease of scheduling'], contains: [['ease', 'schedul']] },
-  { key: 'quality', label: 'Quality of services', required: false, aliases: ['quality of services', 'quality of service'], contains: [['quality', 'service']] },
-  { key: 'timeToAppt', label: 'Time to get an appointment', required: false, aliases: ['time to get an appointment'], contains: [['time to', 'appointment']] },
-  { key: 'processPrior', label: 'Ease of process prior to the appointment', required: false, aliases: ['ease of process prior to the appointment'], contains: [['prior', 'appointment']] },
-  { key: 'overall', label: 'Overall subscription', required: false, aliases: ['overall subscription'], contains: [['overall', 'subscription']] },
-  { key: 'craftsmanship', label: 'Associate craftsmanship', required: false, aliases: ['associate craftsmanship'], contains: [['craftsmanship']] },
-  { key: 'professionalism', label: 'Associate professionalism', required: false, aliases: ['associate professionalism'], contains: [['professionalism']] },
-  { key: 'knowledge', label: 'Associate knowledge', required: false, aliases: ['associate knowledge'], contains: [['associate', 'knowledge']] },
+  { key: 'quality', label: 'Quality of services', required: false, aliases: ['quality of services', 'quality of service', 'project quality'], contains: [['quality', 'service']] },
+  { key: 'timeToAppt', label: 'Time to get an appointment', required: false, aliases: ['time to get an appointment', 'amount of time it took to complete your project'], contains: [['time to', 'appointment'], ['amount of time']] },
+  { key: 'processPrior', label: 'Ease of process prior to the appointment', required: false, aliases: ['ease of process prior to the appointment', 'ease of process'], contains: [['prior', 'appointment']] },
+  { key: 'overall', label: 'Overall subscription', required: false, aliases: ['overall subscription', 'the overall homecare+ subscription'], contains: [['overall', 'subscription']] },
+  { key: 'craftsmanship', label: 'Associate craftsmanship', required: false, aliases: ['associate craftsmanship', 'craftsmanship'], contains: [['craftsmanship']] },
+  { key: 'professionalism', label: 'Associate professionalism', required: false, aliases: ['associate professionalism', 'professionalism'], contains: [['professionalism']] },
+  { key: 'knowledge', label: 'Associate knowledge', required: false, aliases: ['associate knowledge', 'knowledge'], contains: [['associate', 'knowledge']] },
 ];
 export const ATTR_FIELD_KEYS = ATTR_FIELDS.map((f) => f.key);
 

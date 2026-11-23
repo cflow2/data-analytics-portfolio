@@ -77,10 +77,13 @@ export interface FollowUpRecord {
 export interface AttributeWeekly {
   id: string; // `${fw}:${attr}`
   fw: number;
-  attr: AttributeKey;
+  /** One of the nine attributes, or 'ltr' (Medallia's LTR, kept only to cross-check the Tracker). */
+  attr: AttributeKey | 'ltr';
   top2: number;
   n: number;
   pct: number;
+  /** n is Medallia's survey Sample Size, not a per-question count. */
+  nApprox?: boolean;
   sourceFile: string;
 }
 

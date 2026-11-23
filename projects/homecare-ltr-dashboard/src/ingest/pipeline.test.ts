@@ -99,7 +99,7 @@ describe('import pipeline end to end (demo files → IndexedDB)', () => {
 
   beforeAll(async () => {
     // Medallia first (before the Tracker) to prove later folding works.
-    const order = [/Responses/, /Tracker/, /Commentary/, /Analytics/, /Loyalty/, /^FW40/, /Store_District/];
+    const order = [/Responses/, /Tracker/, /Commentary/, /^Analytics/, /Loyalty/, /^FW40/, /Store_District/];
     for (const re of order) {
       for (const f of files.filter((x) => re.test(x.name))) {
         const p = parseFile(req(f.name, f.data));
@@ -129,7 +129,14 @@ describe('import pipeline end to end (demo files → IndexedDB)', () => {
     const fw40 = all.filter((s) => s.fw === 40);
     expect(fw40.filter((s) => s.attrs?.scheduling !== undefined).length).toBe(119);
     expect(reports['Customer_Commentary_DEMO.xlsx'].merged).toBeGreaterThan(80);
-    expect(await db.attributeWeekly.count()).toBe(45);
+    // Medallia Analytics (real layout, FW40 by days): nine attributes + LTR
+    const aw = await db.attributeWeekly.where('fw').equals(40).toArray();
+    expect(aw).toHaveLength(10);
+    expect(Math.abs(aw.find((a) => a.attr === 'scheduling')!.pct - 87.4)).toBeLessThan(1.5);
+    const check = reports['Analytics - 2026-11-09T101500.000.xlsx'].medalliaLtrCheck!;
+    expect(check).toHaveLength(1);
+    expect(check[0]).toMatchObject({ fw: 40, medalliaN: 131, trackerN: 131 });
+    expect(check[0].medalliaPct).toBeCloseTo(check[0].trackerPct!, 1);
   });
 
   it('drops calls outside the selected week and reports it', () => {

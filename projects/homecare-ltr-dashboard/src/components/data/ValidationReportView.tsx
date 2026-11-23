@@ -77,6 +77,15 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
           )}
         </Row>
       ))}
+      {report.medalliaLtrCheck?.map((c) => {
+        const gap = c.trackerPct === null ? null : c.medalliaPct - c.trackerPct;
+        return (
+          <Row key={c.fw} label={`FW${c.fw} LTR cross-check`} flag={gap !== null && (Math.abs(gap) >= 1 || c.medalliaN !== c.trackerN)}>
+            Medallia {c.medalliaPct.toFixed(1)}% (n={c.medalliaN}) · Tracker {c.trackerPct === null ? 'not loaded' : `${c.trackerPct.toFixed(1)}% (n=${c.trackerN})`}
+            {gap !== null && <> · gap {gap >= 0 ? '+' : ''}{gap.toFixed(1)} pts. The Tracker is the source of truth.</>}
+          </Row>
+        );
+      })}
       {report.storesFromSheets !== undefined && <Row label="Store → district">{report.storesFromSheets ? `${report.storesFromSheets} stores read from the Tracker’s store sheets` : 'Not in the Tracker. Upload a mapping CSV.'}</Row>}
       {report.unmappedStores && (
         <Row label="Unmapped stores" flag={report.unmappedStores.length > 0}>

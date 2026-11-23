@@ -4,14 +4,14 @@
  */
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
-import { fiscalWeekInYear } from '@/lib/fiscal';
+import { fiscalWeek, fiscalWeekInYear } from '@/lib/fiscal';
 import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
   AttributeKey, AttributeWeekly, CallRecord, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord, SurveySource,
 } from '@/domain/types';
-import type { ISODate } from '@/lib/dates';
+import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
   cellText, cleanCaseNo, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
@@ -269,38 +269,138 @@ function buildAnalyticsLong(ctx: Ctx, rows: unknown[][], map: Record<string, num
   return [...out.values()];
 }
 
-/** Wide analytics layout: one row per attribute, one column per week ("FW40"). */
-function detectWideAnalytics(sheets: Sheet[]): { sheet: Sheet; headerIndex: number; weekCols: [number, number][] } | null {
+// ───────── Medallia Analytics (wide): one row per measure, one column per day or week ─────────
+const DAY_HEADER = /^\s*(\d{1,2})\s+(sat|sun|mon|tue|wed|thu|fri)[a-z]*\.?\s*$/i;
+const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+interface PeriodCol { col: number; fw: number; date?: ISODate }
+interface WideLayout {
+  sheet: Sheet;
+  headerIndex: number;
+  periods: PeriodCol[];
+  totalCol: number | null;
+  anchorNote?: string;
+}
+
+/** Export timestamp in the file name, e.g. "Analytics - 2026-11-23T114201.994.xlsx". */
+function dateFromFileName(name: string): ISODate | null {
+  const m = /(\d{4})-(\d{2})-(\d{2})/.exec(name);
+  return m ? parseDateCell(`${m[1]}-${m[2]}-${m[3]}`) : null;
+}
+
+/**
+ * Resolve period columns. Day headers ("14 Sat") carry no month/year: date them as the most recent matching
+ * day on or before the export date (file name timestamp, else today), then step forward one day per column.
+ */
+export function resolvePeriodColumns(header: unknown[], refDate: ISODate, fyStart: ISODate): { periods: PeriodCol[]; totalCol: number | null; anchorNote?: string } {
+  const periods: PeriodCol[] = [];
+  let totalCol: number | null = null;
+  let prev: ISODate | null = null;
+  let anchorNote: string | undefined;
+  header.forEach((cell, col) => {
+    const t = cellText(cell);
+    if (!t) return;
+    if (/^total$/i.test(t)) { totalCol = col; return; }
+    const fwm = /^\s*fw\s*#?\s*(\d{1,2})\s*$/i.exec(t);
+    if (fwm) { periods.push({ col, fw: Number(fwm[1]) }); return; }
+    const dm = DAY_HEADER.exec(t);
+    if (dm) {
+      const day = Number(dm[1]);
+      const dow = DOW[dm[2].slice(0, 3).toLowerCase()];
+      let d: ISODate | null = null;
+      if (prev) {
+        for (let k = 1; k <= 31 && !d; k++) { const c = addDays(prev, k); if (Number(c.slice(8)) === day && weekday(c) === dow) d = c; }
+      } else {
+        for (let k = 0; k <= 400 && !d; k++) { const c = addDays(refDate, -k); if (Number(c.slice(8)) === day && weekday(c) === dow) d = c; }
+        if (d) anchorNote = `Day columns have no month or year; dated from ${monthDay(refDate)}, ${refDate.slice(0, 4)}, so “${t}” = ${monthDay(d)}, ${d.slice(0, 4)}.`;
+      }
+      if (d) { periods.push({ col, fw: fiscalWeek(d, fyStart), date: d }); prev = d; }
+      return;
+    }
+    const asDate = typeof cell === 'number' ? parseDateCell(cell) : parseDateCell(t.replace(/^week (of|ending)\s*/i, ''));
+    if (asDate) periods.push({ col, fw: fiscalWeek(asDate, fyStart), date: asDate });
+  });
+  return { periods, totalCol, anchorNote };
+}
+
+function rowLabel(row: unknown[]): string {
+  const c = row.find((x) => typeof x === 'string' && x.trim() !== '');
+  return c ? String(c) : '';
+}
+
+function detectWideAnalytics(sheets: Sheet[], name: string, today: ISODate, fyStart: ISODate): WideLayout | null {
+  const ref = dateFromFileName(name) ?? today;
   for (const sheet of sheets) {
     for (let r = 0; r < Math.min(15, sheet.rows.length); r++) {
-      const row = sheet.rows[r] ?? [];
-      const weekCols = row.map((c, i) => [i, /^\s*fw\s*#?\s*(\d{1,2})\s*$/i.exec(String(c ?? ''))?.[1]] as const)
-        .filter(([, m]) => m).map(([i, m]) => [i, Number(m)] as [number, number]);
-      if (!weekCols.length) continue;
-      const attrRows = sheet.rows.slice(r + 1, r + 30).filter((rw) => rw && rw.some((c) => typeof c === 'string' && attributeKeyFor(c)));
-      if (attrRows.length >= 3) return { sheet, headerIndex: r, weekCols };
+      const { periods, totalCol, anchorNote } = resolvePeriodColumns(sheet.rows[r] ?? [], ref, fyStart);
+      if (!periods.length) continue;
+      const attrRows = sheet.rows.slice(r + 1, r + 40).filter((rw) => rw && attributeKeyFor(rowLabel(rw)));
+      if (attrRows.length >= 3) return { sheet, headerIndex: r, periods, totalCol, anchorNote };
     }
   }
   return null;
 }
 
-function buildAnalyticsWide(ctx: Ctx, wide: NonNullable<ReturnType<typeof detectWideAnalytics>>): AttributeWeekly[] {
-  const out: AttributeWeekly[] = [];
-  for (const row of wide.sheet.rows.slice(wide.headerIndex + 1)) {
-    if (rowIsBlank(row)) continue;
+function buildAnalyticsWide(ctx: Ctx, w: WideLayout): AttributeWeekly[] {
+  const body = w.sheet.rows.slice(w.headerIndex + 1);
+  const sizeRow = body.find((r) => r && /sample size|^n$|responses/i.test(rowLabel(r)));
+  const size = (col: number) => (sizeRow ? parseNumber(sizeRow[col]) : null);
+  const measures: { attr: AttributeKey | 'ltr'; row: unknown[] }[] = [];
+  for (const row of body) {
+    if (!row || row === sizeRow) continue;
+    const label = rowLabel(row);
+    const hasNumbers = w.periods.some((p) => parseNumber(row[p.col]) !== null);
+    if (!label || !hasNumbers) continue; // section headers like "Drivers of LTR"
     ctx.report.rowsRead++;
-    const labelCell = row.find((c) => typeof c === 'string' && attributeKeyFor(c));
-    const attr = labelCell ? attributeKeyFor(String(labelCell)) : null;
-    if (!attr) { drop(ctx.report, 'Not one of the nine attributes'); continue; }
-    for (const [col, fw] of wide.weekCols) {
-      const p = pct(row[col]);
-      if (p === null) continue;
-      out.push({ id: `${fw}:${attr}`, fw, attr, pct: p, n: 0, top2: 0, sourceFile: ctx.fileName });
-      ctx.report.weeks[fw] = (ctx.report.weeks[fw] ?? 0) + 1;
-    }
+    const attr: AttributeKey | 'ltr' | null = /likelihood to recommend|^ltr\b/i.test(label) ? 'ltr' : attributeKeyFor(label);
+    if (!attr) { drop(ctx.report, `Not one of the nine attributes (“${label}”)`); continue; }
+    measures.push({ attr, row });
     ctx.report.rowsKept++;
   }
-  ctx.report.warnings.push('This analytics layout has no n column; attribute n will show as unknown.');
+  // Values are 0–100 unless every value in the row is a fraction (0–1).
+  const scaleOf = (row: unknown[]) => {
+    const vals = w.periods.map((p) => parseNumber(row[p.col])).filter((v): v is number => v !== null);
+    return vals.length && vals.every((v) => v <= 1) && !w.periods.some((p) => String(row[p.col] ?? '').includes('%')) ? 100 : 1;
+  };
+  const weeks = [...new Set(w.periods.map((p) => p.fw))].filter((fw) => fw >= 1 && fw <= 52);
+  const out: AttributeWeekly[] = [];
+  const totalMismatch: string[] = [];
+  for (const fw of weeks) {
+    const cols = w.periods.filter((p) => p.fw === fw);
+    const n = sizeRow ? cols.reduce((a, p) => a + (size(p.col) ?? 0), 0) : 0;
+    for (const m of measures) {
+      const scale = scaleOf(m.row);
+      // Weighted by each day's Sample Size (this reproduces Medallia's own Total column).
+      let num = 0, den = 0;
+      for (const p of cols) {
+        const v = parseNumber(m.row[p.col]);
+        if (v === null) continue;
+        const wgt = sizeRow ? size(p.col) ?? 0 : 1;
+        if (wgt <= 0) continue;
+        num += v * scale * wgt; den += wgt;
+      }
+      if (!den) continue;
+      const pctV = num / den;
+      out.push({ id: `${fw}:${m.attr}`, fw, attr: m.attr, pct: pctV, n, top2: Math.round((pctV / 100) * n), nApprox: true, sourceFile: ctx.fileName });
+      ctx.report.weeks[fw] = (ctx.report.weeks[fw] ?? 0) + 1;
+      if (weeks.length === 1 && w.totalCol !== null && cols.length === w.periods.length) {
+        const total = parseNumber(m.row[w.totalCol]);
+        if (total !== null && Math.abs(total * scale - pctV) > 0.15) totalMismatch.push(`${m.attr} (file Total ${total}, computed ${pctV.toFixed(1)})`);
+      }
+    }
+  }
+  const dates = w.periods.map((p) => p.date).filter((d): d is ISODate => !!d).sort();
+  if (dates.length) ctx.report.dateRange = [dates[0], dates[dates.length - 1]];
+  const outside = w.periods.filter((p) => p.fw < 1 || p.fw > 52).length;
+  if (outside) drop(ctx.report, 'Column outside the fiscal year');
+  if (w.anchorNote) ctx.report.warnings.push(w.anchorNote);
+  if (weeks.length > 1 || w.periods.some((p) => p.date)) {
+    const partial = weeks.filter((fw) => w.periods.filter((p) => p.fw === fw && p.date).length > 0 && w.periods.filter((p) => p.fw === fw).length < 7);
+    if (partial.length) ctx.report.warnings.push(`Partial week(s) in this export: ${partial.map((x) => `FW${x}`).join(', ')}. Values cover only the days present.`);
+  }
+  if (!sizeRow) ctx.report.warnings.push('No Sample Size row: days are weighted equally and n is unknown.');
+  else ctx.report.warnings.push('n per attribute is Medallia’s survey Sample Size (the export has no per-question count).');
+  if (totalMismatch.length) ctx.report.warnings.push(`Computed weekly values differ from the file’s Total column: ${totalMismatch.join('; ')}.`);
   return out;
 }
 
@@ -318,7 +418,7 @@ export function parseFile(req: ParseRequest): ParsedFile {
       cand = { kind: req.force.kind, sheet: sheet.name, headerIndex: req.force.headerIndex, map, missing, score: 0 };
     } else {
       cand = detectCandidates(req.name, sheets, req.remembered)[0] ?? null;
-      const wide = detectWideAnalytics(sheets);
+      const wide = detectWideAnalytics(sheets, req.name, req.today ?? todayISO(), req.fyStart);
       if (wide && (!cand || cand.missing.length > 0)) {
         const report = newReport('medallia-analytics');
         const ctx: Ctx = { fileName: req.name, fyStart: req.fyStart, rules: req.rules, salt: req.salt, originals: [], report };
