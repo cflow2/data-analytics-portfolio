@@ -27,6 +27,8 @@ export interface SurveyRecord {
   date: ISODate;
   storeNo: string;
   region: string;
+  /** NORTH / SOUTH / WEST (Lowe's Division) */
+  division?: string;
   market?: string;
   appointmentId?: string;
   ltr: number | null;
@@ -34,6 +36,8 @@ export interface SurveyRecord {
   score100?: number | null;
   comment: string;
   attrs?: Partial<Record<AttributeKey, number>>;
+  /** Medallia topic tags (“Category - Topic (Sentiment)”). Suggestions only, never used to set themes. */
+  topics?: string[];
   sourceFile: string;
   redactionUncertain?: boolean;
   demo?: boolean;

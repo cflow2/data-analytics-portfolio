@@ -8,6 +8,7 @@ import { hashBytes } from '@/ingest/normalize';
 import type { ParsedFile, ParseRequest, ValidationReport } from '@/ingest/types';
 import type { Candidate, ColumnMapping } from '@/ingest/specs';
 import { getRedactionRules, getRememberedMappings, getSalt, rememberMapping } from './privacy';
+import { getRegionConfig } from '@/config/regions';
 import { useSettings } from './settings';
 import { todayISO } from '@/lib/dates';
 
@@ -38,8 +39,8 @@ interface ImportState {
 }
 
 async function request(name: string, buffer: ArrayBuffer, force?: ParseRequest['force']): Promise<ParseRequest> {
-  const [rules, salt, remembered] = await Promise.all([getRedactionRules(), getSalt(), getRememberedMappings()]);
-  return { fileId: hashBytes(buffer), name, buffer: buffer.slice(0), fyStart: useSettings.getState().fyStart, rules, salt, remembered, force, today: todayISO() };
+  const [rules, salt, remembered, regionCfg] = await Promise.all([getRedactionRules(), getSalt(), getRememberedMappings(), getRegionConfig()]);
+  return { fileId: hashBytes(buffer), name, buffer: buffer.slice(0), fyStart: useSettings.getState().fyStart, rules, salt, remembered, force, today: todayISO(), pictureMap: regionCfg.pictures };
 }
 
 function statusFor(p: ParsedFile): StageStatus {

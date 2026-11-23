@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { SlideConfigEditor } from '@/components/settings/SlideConfigEditor';
 import { RedactionRulesEditor } from '@/components/data/RedactionRulesEditor';
 import { TaxonomyEditor } from '@/components/voc/TaxonomyEditor';
 import { useImports } from '@/state/imports';
@@ -80,6 +81,9 @@ export function Settings() {
             } else setMapMsg('That file doesn’t look like a store→district mapping. Open the Data Manager to map its columns.');
           }} />
           {mapMsg && <p role="status" className="mt-2 text-xs text-muted">{mapMsg}</p>}
+        </Card>
+        <Card title="LTR slide: divisions, map and Key Drivers" className="col-span-2">
+          <SlideConfigEditor />
         </Card>
         <Card title="Theme taxonomy and keyword rules" className="col-span-2">
           <TaxonomyEditor />

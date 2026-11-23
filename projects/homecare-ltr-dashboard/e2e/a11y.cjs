@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const { chromium } = require('playwright');
 const AXE = fs.readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-const ROUTES = ['/', '/trends', '/regions', '/detractors', '/attributes', '/voc', '/calls', '/cross', '/wbr', '/pulse', '/ask', '/review', '/data', '/settings'];
+const ROUTES = ['/', '/trends', '/regions', '/detractors', '/attributes', '/voc', '/calls', '/cross', '/wbr', '/slide', '/pulse', '/ask', '/review', '/data', '/settings'];
 
 (async () => {
   const html = path.resolve(__dirname, '../dist/index.html');

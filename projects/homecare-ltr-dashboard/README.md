@@ -22,7 +22,7 @@ Your data stays in the browser profile for `file://` pages. Replacing `index.htm
 |---|---|---|
 | **Daily, morning** | Pick today's date; read or copy the 60-second script (Monday covers the weekend). | **Daily Pulse** |
 | **Monday** | Upload the LTR Tracker, Medallia Responses export, Analytics report, Customer Commentary, all Loyalty Case files for the week (import calls into the fiscal week), the detractor follow-up file, and a Store→District CSV if stores show as Unmapped. Read each file's validation report. | **Data Manager** |
-| **Tuesday** | 1. Check **Command Center** alerts. 2. Clear the **Review Queue** (low-confidence tags, uncertain redaction; add phrases to the rules as you go). 3. Skim **VOC Themes** and **Contact Center**; pin one quote per theme; escalate damage calls. 4. Update the **Signal Register** on Cross-Channel. 5. Build the slide in **WBR Builder**: pick and order themes, edit lines (≤ 85 characters, numbers checked), resolve the pre-flight, download the .pptx. | Several |
+| **Tuesday** | 1. Check **Command Center** alerts. 2. Clear the **Review Queue** (low-confidence tags, uncertain redaction; add phrases to the rules as you go). 3. Skim **VOC Themes** and **Contact Center**; pin one quote per theme; escalate damage calls. 4. Update the **Signal Register** on Cross-Channel. 5. Build the slide in **WBR Builder**: pick and order themes, edit lines (≤ 85 characters, numbers checked), resolve the pre-flight, download the .pptx. 6. Open **LTR Slide**: check the validation panel, confirm the six callouts and card text, add the RedVest shout-out, then download the .pptx (or PNG) and the talk track. | Several |
 | **Wednesday** | Present the slide (or use **Present** mode). Log every leadership question in the **WBR Builder → Leadership questions log**; next week's speaker notes open with them, answered from that week's data. | WBR Builder |
 | **After the WBR** | Lock the week on **Data Manager** (read-only) and export a backup. | Data Manager |
 
@@ -161,6 +161,23 @@ src/
   pages/        one file per screen
 ```
 
+## LTR Slide (weekly view)
+
+One 1920×1080 slide, scaled to fit, for the weekly LTR readout (route `#/slide`, nav → Deliver → LTR Slide). The calculations live in `src/slide/ltrMetrics.ts`, and `src/slide/ltrMetrics.test.ts` reproduces the FW41 values from the slide spec with a synthetic fixture (`src/slide/fw41Fixture.ts`). They have also been checked against the real LTR_Tracker1123.
+
+| Element | Rule |
+|---|---|
+| KPIs | Week LTR, change vs last week, vs the 93 benchmark, regions at or above 93 (unrounded), count scored 0–8. With **Show allowance** on (off by default), the count shows the allowance: floor(n × 0.07). |
+| Rounding and colour | Whole numbers round half up from one decimal (94.49 → 94.5 → 95). Colours use the unrounded value (FW38 92.55 shows 93 in red). Changes = rounded − rounded. ▲ is black, ▼ is red. |
+| Map | Uses the Tracker's “LTR Region Map” sheet: the base picture plus one picture per region. Each region is filled green (≥ 93), yellow (< 93) or grey (n < 5). Picture → region and region → division are set in **Settings → LTR slide**. Until a Tracker with that sheet is imported, a tile placeholder is shown. |
+| Callouts (6) | Suggested in this order: the 2 regions with the most 0–8 scores (n ≥ 10), the biggest drop (n ≥ 10), up to 2 low-count drops (n < 10, asterisked), 1 bright spot (biggest gain that is now ≥ 93). A region that moved on one low score with n < 12 is held back unless a slot is open. Categories (SCOPE / EXECUTION / CONFIRMING) come from comment tags, with Medallia topics as hints. All are editable and saved per week. |
+| Trend | Last 4 weeks. Bars = 0–8 count (left axis), blue if the week's LTR ≥ 93, otherwise red. The line = LTR (right axis). A dashed line marks the 93 benchmark. This deliberately uses two axes, as the slide spec asks. |
+| Divisions | South, West, North, from the region config. |
+| Key Drivers | Medallia Analytics % 9–10 for the week (falls back to per-survey answers). Which attributes appear, and their short names, are set in Settings. |
+| Cards | Medallia buckets: Promoters 9–10, Passives 7–8, Detractors 0–6. Drivers and bullets are drafted from comment tags and can be edited. |
+| Exports | .pptx: native text, a native bar+line combo chart, a native drivers chart, the map as a picture, and the talk track in the speaker notes (in slide order, then a “Back pocket”), with no comment parts so it opens on iPad. Also PNG at 3840×2160 and a JSON snapshot (saved per week in IndexedDB and downloaded). |
+| Validation panel | Survey count by week, YTD (compare with the Tracker), Tracker vs Medallia week LTR, duplicate appointments (same date = warning; repeat visits = info), regions without surveys, regions missing from the division config, missing Key Drivers. |
+
 ## Quality checklist
 
 Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `e2e` = `npm run e2e`; `a11y` = `npm run e2e:a11y`.
@@ -191,7 +208,9 @@ Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `
 | Pre-flight blocks export until passed or overridden with a reason | ✅ | unit + e2e |
 | Every screen: loading, empty (names the file), error state | ✅ | `PageGate` + route `ErrorBoundary`; e2e checks every empty state |
 | Keyboard navigation; Ctrl+K palette | ✅ | e2e (palette navigation, visible focus, focus moves to content on navigation); drag-reorder has ▲/▼ buttons; Review Queue keys |
-| WCAG AA contrast, light and dark (axe) | ✅ | a11y: 14 screens × 2 themes, **no violations of any severity** |
+| LTR Slide: FW41 values (91, ▼4, −2, 6 of 14, 20 scored 0–8, allowed 15, 198/11/9, divisions 94/89/87, trend colours) | ✅ | unit `slide/ltrMetrics.test.ts`; also checked against the real Tracker 1123 |
+| LTR Slide exports: combo chart on a secondary axis, drivers chart, talk track + back pocket, no comment parts, PNG 3840×2160 | ✅ | e2e |
+| WCAG AA contrast, light and dark (axe) | ✅ | a11y: 15 screens × 2 themes, **no violations of any severity** |
 | No console errors/warnings; strict TS; lint; tests | ✅ | e2e console check; `npm run typecheck`, `npm run lint`, `npm test` |
 | `npm run build` → one HTML file that opens offline and shows the demo data | ✅ | e2e (file://); startup ≈ 0.3 s |
 | README with setup, weekly workflow, changing business rules | ✅ | this file |
@@ -209,3 +228,4 @@ Two colour tokens are a shade darker than the brief to pass WCAG AA as text on t
 | 5 Writing & Ask (no AI) | rule-based writing, number verification, local Ask | ✅ |
 | 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | ✅ |
 | 7 Hardening | accessibility (axe), performance, locked weeks read-only, error boundary, e2e checklist, docs | ✅ |
+| 8 LTR Slide | weekly LTR slide, Tracker map extraction, callouts, combo chart, PPTX/PNG/JSON, settings | ✅ |

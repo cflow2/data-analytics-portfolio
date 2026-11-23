@@ -59,6 +59,8 @@ export interface BuildResult {
   attributeWeekly: AttributeWeekly[];
   originals: OriginalText[];
   report: ValidationReport;
+  /** Tracker only: the region map pictures from the “LTR Region Map” sheet */
+  regionMap?: import('./regionMap').RegionMapAsset | null;
 }
 
 export interface ParseRequest {
@@ -69,6 +71,8 @@ export interface ParseRequest {
   rules: RedactionRule[];
   salt: string;
   remembered: Partial<Record<string, ColumnMapping>>;
+  /** Picture name → region for the Tracker's region map (from the region config). */
+  pictureMap?: Record<string, string>;
   /** Fallback date for undated day columns ("14 Sat") when the file name has no export timestamp. */
   today?: ISODate;
   /** Force a kind / sheet / header row / mapping (from the mapping dialog). */

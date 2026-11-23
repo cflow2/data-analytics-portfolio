@@ -178,6 +178,10 @@ function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, 
       const sn = cellText(get(row, map, 'storeName'));
       if (sn) ctx.storeInfo.set(storeNo, { ...parseStoreName(sn), region: rec.region });
     }
+    const division = cellText(get(row, map, 'division')).toUpperCase();
+    if (division) rec.division = division;
+    const topics = cellText(get(row, map, 'topics'));
+    if (topics) rec.topics = topics.split(/,\s*(?=[A-Z][^,]* - )/).map((x) => x.trim()).filter(Boolean);
     const market = cellText(get(row, map, 'market'));
     if (market) rec.market = market;
     const appt = cellText(get(row, map, 'appointmentId'));

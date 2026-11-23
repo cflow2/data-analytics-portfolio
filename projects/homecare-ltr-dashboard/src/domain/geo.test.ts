@@ -20,3 +20,10 @@ describe('geo', () => {
     expect(districtOf('9999', m)).toBe('Unmapped');
   });
 });
+
+describe('store numbers in Medallia "Store" values', () => {
+  it('reads the leading number', () => {
+    expect(normalizeStoreNo("2702 - LOWE'S OF HAINES CITY, FL")).toBe('2702');
+    expect(normalizeStoreNo("569 - LOWE'S OF LAKE COUNTY, FL")).toBe('0569');
+  });
+});

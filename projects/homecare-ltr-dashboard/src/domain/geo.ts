@@ -14,7 +14,9 @@ export function normalizeRegion(raw: unknown): string {
 
 /** Store numbers are 4 digits, zero-padded: "123" → "0123". */
 export function normalizeStoreNo(raw: unknown): string {
-  const s = String(raw ?? '').trim().replace(/^#/, '').replace(/\.0+$/, '');
+  let s = String(raw ?? '').trim().replace(/^#/, '').replace(/\.0+$/, '');
+  const lead = /^(\d{1,4})\s*-\s*\S/.exec(s); // "2702 - LOWE'S OF HAINES CITY, FL"
+  if (lead) s = lead[1];
   return /^\d{1,4}$/.test(s) ? s.padStart(4, '0') : s;
 }
 

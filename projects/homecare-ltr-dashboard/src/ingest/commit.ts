@@ -22,6 +22,8 @@ function mergeInto(target: SurveyRecord, from: SurveyRecord): boolean {
   }
   if (!target.comment && from.comment) { target.comment = from.comment; target.redactionUncertain = from.redactionUncertain; changed = true; }
   if (!target.appointmentId && from.appointmentId) { target.appointmentId = from.appointmentId; changed = true; }
+  if (!target.division && from.division) { target.division = from.division; changed = true; }
+  if (!target.topics?.length && from.topics?.length) { target.topics = from.topics; changed = true; }
   return changed;
 }
 
@@ -219,6 +221,7 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
     report.unmappedStores = (await database.stores.toArray()).filter((s) => !s.district).map((s) => s.storeNo).sort();
   }
 
+  if (b.regionMap) await database.kv.put({ key: 'regionMap', value: b.regionMap });
   // The week calls were imported into becomes the reporting week (the default in the filter bar).
   if (b.kind === 'loyalty-cases' && opts.targetWeek) {
     const prev = (await database.kv.get('reportingWeek'))?.value as number | undefined;

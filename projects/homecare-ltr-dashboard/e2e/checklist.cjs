@@ -32,7 +32,7 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   check('Single file opens from file://', (await page.title()).includes('HomeCare+'));
   // Empty states: with nothing loaded, every data screen names the files to upload.
   const emptyMissing = [];
-  for (const r of ['/', '/trends', '/regions', '/detractors', '/attributes', '/voc', '/calls', '/cross', '/wbr', '/pulse', '/ask']) {
+  for (const r of ['/', '/trends', '/regions', '/detractors', '/attributes', '/voc', '/calls', '/cross', '/wbr', '/slide', '/pulse', '/ask']) {
     await page.goto(url + '#' + r); await page.waitForTimeout(500);
     const body = await main();
     if (!/Go to Data Manager|Upload these files|Nothing is loaded|No data/i.test(body) || /This screen hit a problem/.test(body)) emptyMissing.push(r);
@@ -123,6 +123,22 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   const notes = await zip.file(names.find((n) => /notesSlide\d+\.xml$/.test(n))).async('string');
   check('PPTX: one slide, native chart, speaker notes', names.filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).length === 1 && names.some((n) => /charts\/chart\d+\.xml$/.test(n)) && notes.includes('Talking points') && notes.includes('Counts are calls, not unique members'));
   check('PPTX contains no unredacted text', !DEMO_PII.some((p) => xml.includes(p)));
+
+  // 5b. LTR slide: native combo + drivers charts, talk track with back pocket, iPad-safe parts, PNG at 3840×2160
+  await page.goto(url + '#/slide?fw=40'); await page.waitForTimeout(1500);
+  const [sdl] = await Promise.all([page.waitForEvent('download'), page.click('button:has-text("Download .pptx")')]);
+  const sp = path.join(tmp, sdl.suggestedFilename()); await sdl.saveAs(sp);
+  const sz = await JSZip.loadAsync(fs.readFileSync(sp)); const sn = Object.keys(sz.files);
+  const charts = await Promise.all(sn.filter((n) => /charts\/chart\d+\.xml$/.test(n)).map((n) => sz.file(n).async('string')));
+  const snotes = await sz.file(sn.find((n) => /notesSlide\d+\.xml$/.test(n))).async('string');
+  const sxml = (await Promise.all(sn.filter((n) => n.endsWith('.xml')).map((n) => sz.file(n).async('string')))).join('\n');
+  check('LTR slide PPTX: combo chart (bar + line on a secondary axis), drivers chart, talk track + back pocket',
+    charts.length === 2 && charts.some((c) => c.includes('<c:barChart>') && c.includes('<c:lineChart>') && (c.match(/<c:valAx>/g) || []).length === 2) && snotes.includes('TALK TRACK') && snotes.includes('BACK POCKET'));
+  check('LTR slide PPTX has no comment parts and no unredacted text', !sn.some((n) => /comment/i.test(n)) && !DEMO_PII.some((x) => sxml.includes(x)));
+  const [pdl] = await Promise.all([page.waitForEvent('download'), page.click('button:has-text("PNG 1920")')]);
+  const pp = path.join(tmp, 'slide.png'); await pdl.saveAs(pp);
+  const png = fs.readFileSync(pp);
+  check('LTR slide PNG is 3840×2160', png.readUInt32BE(16) === 3840 && png.readUInt32BE(20) === 2160, `${png.readUInt32BE(16)}×${png.readUInt32BE(20)}`);
 
   // 6. Keyboard: Ctrl+K palette, skip link, visible focus
   await page.goto(url + '#/'); await page.waitForTimeout(400);
