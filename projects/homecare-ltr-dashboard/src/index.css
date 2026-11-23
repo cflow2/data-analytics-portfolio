@@ -98,5 +98,6 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .motion, .animate-pulse { transition: none !important; animation: none !important; }
 }
-.presentation { font-size: 16px; }
+/* Presentation mode: larger type for the room (content is zoomed; Chromium/Edge support CSS zoom). */
+.presentation main > div { zoom: 1.18; }
 .presentation h1 { font-size: 32px; }

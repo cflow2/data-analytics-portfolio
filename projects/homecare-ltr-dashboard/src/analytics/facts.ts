@@ -10,6 +10,7 @@ import { detractorRows, rootCauseMix, type DetractorRow } from './detractors';
 import { callKpis, themeMentions, type CallKpis, type ThemeCount } from './voc';
 import { themeHistory, whatChanged, type ThemeChange } from './themes';
 import { countBy } from './calls';
+import { callOutcome } from '@/tagging/engine';
 
 export interface WeekFacts {
   fw: number;
@@ -34,6 +35,7 @@ export interface WeekFacts {
   appointmentSubs: { key: string; count: number }[];
   cancelDrivers: { key: string; count: number }[];
   refundDisputes: number;
+  cancelOutcomes: { processed: number; notProcessed: number; refunds: { key: string; count: number }[] };
   damageUnescalated: number;
   topDrivers: { key: string; count: number }[];
   hasSurveys: boolean;
@@ -84,6 +86,11 @@ export function weekFacts(ds: Dataset, fw: number, benchmark: number, thresholds
     appointmentSubs: countBy(customerTags.filter((t) => t.primary === 'appointment'), (t) => t.subTag ?? '—'),
     cancelDrivers: countBy(customerTags.filter((t) => t.cancellation), (t) => t.primary),
     refundDisputes: customerTags.filter((t) => t.subTag === 'Refund dispute').length,
+    cancelOutcomes: (() => {
+      const outs = calls.filter((c) => !c.isAssociate && ds.tags.get(c.id)?.cancellation).map((c) => callOutcome(c.notes));
+      const processed = outs.filter((o) => o.cancellation === 'Processed').length;
+      return { processed, notProcessed: outs.length - processed, refunds: countBy(outs, (o) => o.refund) };
+    })(),
     damageUnescalated: calls.filter((c) => { const t = ds.tags.get(c.id); const e = ds.escalations.get(c.id); return t && (t.primary === 'damage' || t.escalate) && (!e || e.status === 'New'); }).length,
     topDrivers: countBy(calls.filter((c) => !c.isAssociate), (c) => c.driverNorm || c.driver).slice(0, 5),
     hasSurveys: ws.length > 0,

@@ -13,11 +13,13 @@ import { ContactCenter } from '@/pages/ContactCenter';
 import { CrossChannel } from '@/pages/CrossChannel';
 import { ReviewQueue } from '@/pages/ReviewQueue';
 import { Ask } from '@/pages/Ask';
+import { WbrBuilder } from '@/pages/WbrBuilder';
+import { DailyPulse } from '@/pages/DailyPulse';
 import { SCREENS } from '@/screens';
 
 const BUILT: Record<string, () => JSX.Element> = {
   '/': CommandCenter, '/trends': LtrTrends, '/regions': RegionalDrilldown, '/detractors': Detractors, '/attributes': Attributes,
-  '/voc': VocThemes, '/calls': ContactCenter, '/cross': CrossChannel, '/review': ReviewQueue, '/ask': Ask,
+  '/voc': VocThemes, '/calls': ContactCenter, '/cross': CrossChannel, '/review': ReviewQueue, '/ask': Ask, '/wbr': WbrBuilder, '/pulse': DailyPulse,
   '/data': DataManager, '/settings': Settings,
 };
 

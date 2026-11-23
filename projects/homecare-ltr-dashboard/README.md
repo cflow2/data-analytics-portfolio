@@ -6,7 +6,7 @@ A local, single-page analytics app for HomeCare+ LTR reporting, Voice of the Cus
 - Data lives in this browser's IndexedDB. Export or import a JSON backup from **Data Manager**.
 - `npm run build` produces **one self-contained HTML file** (`dist/index.html`). Double-click it to open it offline.
 
-> **Status:** phases 1–5 of 7 are complete (phase 5 built without AI — see below). See [Build status](#build-status).
+> **Status:** phases 1–6 of 7 are complete (phase 5 built without AI — see below). See [Build status](#build-status).
 
 ## Setup
 
@@ -76,6 +76,15 @@ Every survey comment and customer call is tagged on import (and on **Data Manage
 
 On the demo data the rules reproduce every baseline exactly; on a real FY26 Tracker about 8% of comments land in the Review Queue.
 
+## WBR Builder and Daily Pulse
+
+- **WBR Builder** drafts the “Customer Insights FWxx” slide from the week's data: subtitle with LTR and n, up to 6 theme rows (`Theme: X mentions · Y calls · Z surveys` + a one-line insight with a live 85-character counter), the detractor callout, the “Top VOC Mentions” stacked chart (surveys vs calls, sorted, y-axis rounded above the top bar) and a sources/n footnote. Drag or ▲/▼ to reorder; every line is editable and saved per week; numbers that don't match the data are flagged.
+- **Pre-flight** must pass (or be overridden with a reason) before export: line length, numbers verified, LTR % with n, PII scan of slide + notes, week's data loaded, calls cover Sat–Fri, Review Queue cleared, last week's questions answered.
+- **Exports:** one editable 16:9 .pptx (native text, native chart, speaker notes), slide text, chart data, chart PNG at 2×. A test unzips the .pptx and scans every part for unredacted text.
+- **Leadership questions log:** questions logged at a WBR open the next week's speaker notes (“Last week I was asked about…”), each answered from that week's data, until marked answered.
+- **Daily Pulse:** pick the meeting date (Monday covers the weekend); calls and top drivers, new detractors, damage/safety, cancellations, one thing to watch, and an editable ~60-second script with a large-type reading view.
+- **Presentation mode** (nav → Present): hides navigation, filters, edit controls and “Show original”; larger type; ← → move between screens; Esc exits.
+
 ## No AI, no network
 
 There is no AI provider: the work laptop has no API key or approved gateway, so the AI layer in the brief was replaced by local equivalents.
@@ -106,6 +115,7 @@ src/
   lib/          dates, fiscal calendar, LTR rules, seeded RNG
   domain/       types, taxonomy, attributes, geography
   tagging/      keyword rules engine, runner, taxonomy store, manual overrides, WBR pins
+  wbr/          slide draft, pre-flight checks, speaker notes, PPTX builder
   writing/      rule-based slide lines, callout, what-changed, speaker notes; number verification
   ask/          local question planner + answers (no AI)
   analytics/    LTR pooling, compare baselines, grains, attributes, detractors, theme mentions, headline (pure, tested)
@@ -126,5 +136,5 @@ src/
 | 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ done |
 | 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | ✅ done |
 | 5 Writing & Ask (no AI) | rule-based writing, number verification, local Ask with “Data used”; outbound network blocked | ✅ done |
-| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | next |
-| 7 Hardening | performance, accessibility, quality checklist, weekly workflow docs | |
+| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | ✅ done |
+| 7 Hardening | performance, accessibility, quality checklist, weekly workflow docs | next |

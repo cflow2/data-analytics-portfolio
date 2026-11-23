@@ -17,6 +17,6 @@ export function demoDataset(): Dataset {
     surveys: d.surveys, calls: d.calls, followups: d.followups,
     stores: new Map(d.stores.map((s) => [s.storeNo, s])), tags: new Map(tags.map((t) => [t.recordId, t])), tagList: tags,
     attributeWeekly: [], weeks: new Map(d.weeks.map((w) => [w.fw, w])), escalations: new Map(), files: [],
-    taxonomy: DEFAULT_TAXONOMY, signals: d.signals, pins: {},
+    taxonomy: DEFAULT_TAXONOMY, signals: d.signals, pins: {}, questions: d.questions,
   };
 }

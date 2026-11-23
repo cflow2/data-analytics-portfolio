@@ -13,7 +13,7 @@ const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 export function themeHeader(theme: string, f: WeekFacts, tax: ThemeDef[]): string {
   const m = f.mentions.find((x) => x.theme === theme);
   const s = m?.surveys ?? 0, c = m?.calls ?? 0;
-  return `${tax.find((t) => t.id === theme)?.name ?? theme}: ${s + c} mentions · ${c} calls · ${s} surveys`;
+  return `${tax.find((t) => t.id === theme)?.name ?? theme}: ${plural(s + c, 'mention')} · ${plural(c, 'call')} · ${plural(s, 'survey')}`;
 }
 
 const SCOPE_LABEL: Record<string, string> = {
