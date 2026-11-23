@@ -172,7 +172,7 @@ export function CommandCenter() {
                 sub={m.k.calls ? `${m.k.cases} distinct cases · +${m.k.associate} associate/store (not VOC)` : 'Upload Loyalty Case files'}
                 delta={callDelta(m.k.calls || null, (x) => x.calls)} deltaUnit="" deltaDigits={data.filters.compare === 'prior' ? 0 : 1} invert compareLabel={cmpLabel} spark={m.callSpark} />
               <KpiCard label="Cancellations" value={m.k.tagged ? String(m.k.cancellations) : '—'}
-                sub={m.k.tagged ? 'Cancel requests/processed in call notes' : m.k.calls ? 'Needs call tagging (phase 4)' : 'Upload Loyalty Case files'}
+                sub={m.k.tagged ? 'Cancel requests/processed in call notes' : m.k.calls ? 'Run tagging on the Data Manager' : 'Upload Loyalty Case files'}
                 delta={m.k.tagged ? callDelta(m.k.cancellations, (x) => x.cancellations) : null} deltaUnit="" deltaDigits={data.filters.compare === 'prior' ? 0 : 1} invert compareLabel={cmpLabel} spark={m.cancelSpark} />
               <KpiCard label="Exclusion-driven cancel %" value={m.k.exclusionCancelPct === null ? '—' : `${Math.round(m.k.exclusionCancelPct)}%`}
                 sub={m.k.cancellations ? `${m.k.exclusionCancels} of ${m.k.cancellations} cancellations` : undefined}
@@ -204,7 +204,7 @@ export function CommandCenter() {
                     actions={<Link to={{ pathname: '/cross', search }} className="mr-1 text-xs font-medium text-calls underline">Full view</Link>} />
                 ) : (
                   <Card title="Top VOC themes (surveys vs calls)">
-                    <p className="text-sm text-muted">No theme tags for FW{m.fw} yet. Tagging (keyword rules and optional AI) arrives in phase 4.</p>
+                    <p className="text-sm text-muted">No theme tags for FW{m.fw} yet. Upload this week’s files (they’re tagged on import) or use “Re-run tagging” on the Data Manager.</p>
                   </Card>
                 )}
               </div>

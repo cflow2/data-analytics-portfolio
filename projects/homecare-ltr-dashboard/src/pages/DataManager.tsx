@@ -10,6 +10,7 @@ import { weekInfo } from '@/lib/fiscal';
 import { countsForLtr } from '@/domain/survey';
 import { SPEC_BY_KIND } from '@/ingest/specs';
 import { deleteWeek, setWeekLocked } from '@/ingest/commit';
+import { runRuleTagging } from '@/tagging/run';
 import type { ValidationReport } from '@/ingest/types';
 import { useSettings } from '@/state/settings';
 import { useImports } from '@/state/imports';
@@ -54,6 +55,8 @@ function DropZone({ selectedWeek }: { selectedWeek: number }) {
 
 function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSummary>; calls: number; assoc: number; followups: number; locked: boolean }; fyStart: string }) {
   const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
   return (
     <tr className="border-t border-border">
       <td className="py-1.5">{weekInfo(w.fw, fyStart).label}</td>
@@ -66,7 +69,10 @@ function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSu
           <Button variant="ghost" onClick={() => setWeekLocked(w.fw, !w.locked)} aria-label={`${w.locked ? 'Unlock' : 'Lock'} FW${w.fw}`} title={w.locked ? 'Locked: read-only. Click to unlock.' : 'Lock this week (read-only)'}>
             <Icon name="lock" size={14} /> <span className="text-xs">{w.locked ? 'Locked' : 'Lock'}</span>
           </Button>
-          <Button variant="ghost" disabled title="Theme tagging arrives in phase 4"><span className="text-xs">Re-run tagging</span></Button>
+          <Button variant="ghost" disabled={w.locked || busy} title="Re-apply the keyword rules to this week (Manual and AI tags are kept)"
+            onClick={async () => { setBusy(true); const r = await runRuleTagging({ fws: [w.fw] }); setBusy(false); setMsg(`FW${w.fw}: ${r.tagged} tagged by rules, ${r.kept} manual/AI kept`); setTimeout(() => setMsg(null), 4000); }}>
+            <span className="text-xs">{busy ? 'Tagging…' : msg ?? 'Re-run tagging'}</span>
+          </Button>
           {!confirm ? (
             <Button variant="ghost" disabled={w.locked} onClick={() => setConfirm(true)} aria-label={`Delete FW${w.fw}`}><Icon name="trash" size={14} /></Button>
           ) : (

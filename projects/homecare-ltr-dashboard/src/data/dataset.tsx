@@ -1,8 +1,9 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { db } from '@/db/db';
 import { useLive } from '@/hooks/useLive';
+import { DEFAULT_TAXONOMY, type ThemeDef } from '@/domain/taxonomy';
 import type {
-  AttributeWeekly, CallRecord, Escalation, FollowUpRecord, ImportedFile, StoreRecord, SurveyRecord, ThemeTag, WeekMeta,
+  AttributeWeekly, CallRecord, Escalation, FollowUpRecord, ImportedFile, Signal, StoreRecord, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
 export interface Dataset {
@@ -16,6 +17,9 @@ export interface Dataset {
   weeks: Map<number, WeekMeta>;
   escalations: Map<string, Escalation>;
   files: ImportedFile[];
+  taxonomy: ThemeDef[];
+  signals: Signal[];
+  pins: Record<number, Record<string, string>>;
 }
 
 interface DatasetState { data: Dataset | undefined; loading: boolean; error: Error | null }
@@ -24,11 +28,14 @@ const Ctx = createContext<DatasetState>({ data: undefined, loading: true, error:
 /** Loads the whole (local, modest-size) dataset once and keeps it live; screens compute from memory. */
 export function DatasetProvider({ children }: { children: ReactNode }) {
   const q = useLive(async () => {
-    const [surveys, calls, followups, stores, tagList, attributeWeekly, weeks, escalations, files] = await Promise.all([
+    const [surveys, calls, followups, stores, tagList, attributeWeekly, weeks, escalations, files, tax, signals, pinRows] = await Promise.all([
       db.surveys.toArray(), db.calls.toArray(), db.followups.toArray(), db.stores.toArray(), db.tags.toArray(),
       db.attributeWeekly.toArray(), db.weeks.toArray(), db.escalations.toArray(), db.files.orderBy('importedAt').reverse().toArray(),
+      db.kv.get('taxonomy'), db.signals.toArray(), db.kv.where('key').startsWith('wbrPins:').toArray(),
     ]);
-    return { surveys, calls, followups, stores, tagList, attributeWeekly, weeks, escalations, files };
+    const taxonomy = (tax?.value as ThemeDef[] | undefined) ?? DEFAULT_TAXONOMY;
+    const pins = Object.fromEntries(pinRows.map((r) => [Number(r.key.split(':')[1]), r.value as Record<string, string>]));
+    return { surveys, calls, followups, stores, tagList, attributeWeekly, weeks, escalations, files, taxonomy, signals, pins };
   }, []);
   const data = useMemo<Dataset | undefined>(() => q.data && {
     ...q.data,

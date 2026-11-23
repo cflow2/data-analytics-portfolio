@@ -3,6 +3,7 @@ import { generateDemoData } from './generate';
 import { redact } from '@/ingest/redact';
 import { getRedactionRules } from '@/state/privacy';
 import type { OriginalText } from '@/domain/types';
+import { runRuleTagging } from '@/tagging/run';
 
 /** Writes the DEMO dataset into IndexedDB. Idempotent: ids are deterministic, so re-loading overwrites. */
 export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys: number; calls: number }> {
@@ -25,7 +26,6 @@ export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys
     await database.surveys.bulkPut(d.surveys);
     await database.calls.bulkPut(d.calls);
     await database.followups.bulkPut(d.followups);
-    await database.tags.bulkPut(d.tags);
     await database.weeks.bulkPut(d.weeks);
     await database.signals.bulkPut(d.signals);
     await database.questions.bulkPut(d.questions);
@@ -37,6 +37,8 @@ export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys
       dateRange: [d.surveys.reduce((m, s) => (s.date < m ? s.date : m), '9999'), d.surveys.reduce((m, s) => (s.date > m ? s.date : m), '0000')],
     });
   });
+  // Demo records are tagged by the same rules engine as real uploads.
+  await runRuleTagging({ database });
   return { surveys: d.surveys.length, calls: d.calls.length };
 }
 
@@ -49,7 +51,7 @@ export async function removeDemoData(database: HomeCareDB = db): Promise<void> {
     await database.surveys.filter((s) => !!s.demo).delete();
     await database.calls.filter((c) => !!c.demo).delete();
     await database.followups.filter((f) => !!f.demo).delete();
-    await database.tags.filter((t) => t.source === 'Demo').delete();
+    await database.tags.bulkDelete([...d.surveys.map((x) => x.id), ...d.calls.map((x) => x.id)]);
     await database.stores.bulkDelete(d.stores.map((s) => s.storeNo));
     await database.signals.bulkDelete(d.signals.map((s) => s.id));
     await database.questions.bulkDelete(d.questions.map((q) => q.id));

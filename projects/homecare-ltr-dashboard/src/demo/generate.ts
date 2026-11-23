@@ -162,7 +162,7 @@ function genericPromoterComment(rng: Rng): CommentSpec | null {
   if (r < 0.3) return null; // blank comment
   if (r < 0.82) return { text: rng.pick(ASSOC_PRAISE), primary: 'associate', sentiment: 'Positive', subTag: 'Praise' };
   if (r < 0.88) return { text: rng.pick(VALUE_POS.slice(0, 3)), primary: 'value', sentiment: 'Positive' };
-  if (r < 0.92) return { text: rng.pick(APPT_PROMOTER), primary: 'appointment', secondary: ['associate'], sentiment: 'Neutral', subTag: 'Routine scheduling' };
+  if (r < 0.92) { const text = rng.pick(APPT_PROMOTER); return { text, primary: 'appointment', secondary: /associate/i.test(text) ? ['associate'] : [], sentiment: 'Neutral', subTag: 'Routine scheduling' }; }
   if (r < 0.94) return { text: rng.pick(AGING), primary: 'aging', sentiment: 'Positive' };
   if (r < 0.95) return { text: rng.pick(SERVICE_ADD), primary: 'service-add', sentiment: 'Neutral' };
   return { text: rng.pick(GENERIC_POS), primary: 'other', sentiment: 'Positive' };
@@ -339,7 +339,7 @@ const CALL_TEXT: Record<string, string[]> = {
   Praise: ['Member called to say the RedVest Associate was excellent and wanted to pass it on.'],
   Concern: ['Member says the associate was rushed and did not explain the work.', 'Member concerned the associate did not wear shoe covers.'],
   'service-add': ['Member asking if keypad batteries can be added to the visit.', 'Member wants a dishwasher filter cleaning added to the service list.'],
-  aging: ['Member is elderly and lives alone; relies on the visit for safety checks.', 'Member with a disability asking for help scheduling around medical appointments.'],
+  aging: ['Member is elderly and lives alone; relies on the visit for safety checks.', 'Member with a disability relies on the service because they cannot reach the high vents themselves.'],
   other: ['Member asking how to view membership status in the app.', 'Member updating account email and phone on file.', 'Member asking how many visits remain this year.', 'General question about what the visit includes.'],
   cancelOther: ['Member is moving out of state and wants to cancel.', 'Member sold the home and requests cancellation.'],
 };

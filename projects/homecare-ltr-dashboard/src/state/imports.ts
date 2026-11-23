@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { db } from '@/db/db';
 import { parseInWorker } from '@/ingest/client';
 import { commitParsed } from '@/ingest/commit';
+import { runRuleTagging } from '@/tagging/run';
 import { defaultTargetWeek } from '@/ingest/parse';
 import { hashBytes } from '@/ingest/normalize';
 import type { ParsedFile, ParseRequest, ValidationReport } from '@/ingest/types';
@@ -87,6 +88,9 @@ export const useImports = create<ImportState>((set, get) => {
       patch(key, { status: 'importing' });
       try {
         const report = await commitParsed(f.parsed, { targetWeek: f.targetWeek });
+        // Tag the weeks this file touched with the keyword rules (Manual/AI tags are kept).
+        const fws = Object.keys(report.weeks).map(Number).filter((w) => !report.targetWeek || w === report.targetWeek);
+        if (['tracker', 'medallia-responses', 'commentary', 'loyalty-cases'].includes(report.kind) && fws.length) await runRuleTagging({ fws });
         patch(key, { status: 'imported', report });
       } catch (e) {
         patch(key, { status: 'error', error: (e as Error).message });

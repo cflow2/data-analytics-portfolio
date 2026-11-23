@@ -6,7 +6,7 @@ A local, single-page analytics app for HomeCare+ LTR reporting, Voice of the Cus
 - Data lives in this browser's IndexedDB. Export or import a JSON backup from **Data Manager**.
 - `npm run build` produces **one self-contained HTML file** (`dist/index.html`). Double-click it to open it offline.
 
-> **Status:** phases 1–3 of 7 (Foundation, Ingestion, LTR core) are complete. See [Build status](#build-status).
+> **Status:** phases 1–4 of 7 (Foundation, Ingestion, LTR core, VOC & calls) are complete. See [Build status](#build-status).
 
 ## Setup
 
@@ -62,6 +62,20 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 - Phone numbers are hashed with a per-install salt (for repeat-caller detection) and never displayed.
 - The JSON backup contains original text — keep it on the work laptop.
 
+## Theme tagging (rules engine)
+
+Every survey comment and customer call is tagged on import (and on **Data Manager → Re-run tagging**) with one primary theme, up to 3 secondary themes, sentiment and a confidence; calls also get sub-tag, contact type (Avoidable / Deflectable / Necessary), cancellation and escalate flags. Tags show their source: **Rule**, **AI** (phase 5) or **Manual**. Manual tags are never overwritten.
+
+- Keyword rules live in **Settings → Theme taxonomy** (phrases, `word*`, `/regex/`; single words also match plurals), with a test box.
+- Primary precedence: safety/damage > failed experience > service demand > specific praise > general praise. Positive mentions of scheduling or value are general praise; associate praise vs concern is judged on the associate words.
+- Never inferred from the score, Medallia topic tags or blank comments (“No Comment” counts as blank). Associate/store help-desk calls are never tagged.
+- Calls are themed from *Problem / Reason for Calling* only; *Completed Actions* gives outcomes (cancellation processed vs requested, 30-day window, refund processed vs requested vs none).
+- A cancellation means the subscription (not an appointment auto-cancel); a cancellation whose reason mentions an exclusion is “Exclusion drove cancel”.
+- Confidence < 0.7 → **Review Queue** (keys 1–9 / Enter / S); overrides can add the deciding phrase to the rules.
+- Evidence maturity (last 4 weeks): Emerging = 1 week, Repeated = 2+ weeks, Corroborated = both channels, Validated = set in the Signal Register.
+
+On the demo data the rules reproduce every baseline exactly; on a real FY26 Tracker about 8% of comments land in the Review Queue.
+
 ## Calculation notes
 
 - Multi-week figures (FYTD, 4-week average, months, quarters, rolling 4-week) **pool counts** (promoters ÷ n); they never average weekly percentages.
@@ -83,6 +97,7 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 src/
   lib/          dates, fiscal calendar, LTR rules, seeded RNG
   domain/       types, taxonomy, attributes, geography
+  tagging/      keyword rules engine, runner, taxonomy store, manual overrides, WBR pins
   analytics/    LTR pooling, compare baselines, grains, attributes, detractors, theme mentions, headline (pure, tested)
   db/           Dexie schema, backup/restore, queries
   ingest/       file detection, parsing, redaction, validation, commit (worker + pure functions)
@@ -99,7 +114,7 @@ src/
 | 1 Foundation | project, shell, routing, filter bar, theme, fiscal calendar, Dexie schema, demo data | ✅ done |
 | 2 Ingestion | 7 parsers in a Web Worker, fuzzy headers, mapping dialog, redaction, validation report | ✅ done |
 | 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ done |
-| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | next |
-| 5 AI layer | provider settings, tagging, writing, Ask, number verification | |
+| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | ✅ done |
+| 5 AI layer | provider settings, tagging, writing, Ask, number verification | next |
 | 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | |
 | 7 Hardening | performance, accessibility, quality checklist, weekly workflow docs | |

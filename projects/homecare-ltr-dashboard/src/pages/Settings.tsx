@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { RedactionRulesEditor } from '@/components/data/RedactionRulesEditor';
+import { TaxonomyEditor } from '@/components/voc/TaxonomyEditor';
 import { useImports } from '@/state/imports';
 import { useLive } from '@/hooks/useLive';
 import { db } from '@/db/db';
@@ -80,12 +81,14 @@ export function Settings() {
           }} />
           {mapMsg && <p role="status" className="mt-2 text-xs text-muted">{mapMsg}</p>}
         </Card>
+        <Card title="Theme taxonomy and keyword rules" className="col-span-2">
+          <TaxonomyEditor />
+        </Card>
         <Card title="Redaction rules" className="col-span-2">
           <RedactionRulesEditor />
         </Card>
         <Card title="Coming in later phases" className="col-span-2">
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-            <li>Taxonomy editor and keyword rules (phase 4)</li>
             <li>AI provider settings (phase 5)</li>
           </ul>
         </Card>

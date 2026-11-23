@@ -8,10 +8,15 @@ import { LtrTrends } from '@/pages/LtrTrends';
 import { RegionalDrilldown } from '@/pages/RegionalDrilldown';
 import { Detractors } from '@/pages/Detractors';
 import { Attributes } from '@/pages/Attributes';
+import { VocThemes } from '@/pages/VocThemes';
+import { ContactCenter } from '@/pages/ContactCenter';
+import { CrossChannel } from '@/pages/CrossChannel';
+import { ReviewQueue } from '@/pages/ReviewQueue';
 import { SCREENS } from '@/screens';
 
 const BUILT: Record<string, () => JSX.Element> = {
   '/': CommandCenter, '/trends': LtrTrends, '/regions': RegionalDrilldown, '/detractors': Detractors, '/attributes': Attributes,
+  '/voc': VocThemes, '/calls': ContactCenter, '/cross': CrossChannel, '/review': ReviewQueue,
   '/data': DataManager, '/settings': Settings,
 };
 
