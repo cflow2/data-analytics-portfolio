@@ -23,6 +23,7 @@ import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, PageHeader, cx } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
 import { SlidePreview } from '@/components/wbr/SlidePreview';
+import { useIsLocked } from '@/hooks/useLocked';
 
 const KEY = (fw: number) => `wbr:${fw}`;
 
@@ -40,6 +41,7 @@ export function WbrBuilder() {
   const presentation = useUi((s) => s.presentation);
   const chartRef = useRef<ReactEChartsCore>(null);
   const fw = data?.week.fw ?? 0;
+  const locked = useIsLocked(fw);
   const saved = useLive(async () => (fw ? ((await db.kv.get(KEY(fw)))?.value as WbrDraft | undefined) ?? null : null), [fw]);
   const pinnedAsk = useLive(() => (fw ? getWbrNotes(fw) : Promise.resolve([] as string[])), [fw]);
   const [flash, setFlash] = useState<string | null>(null);
@@ -72,7 +74,7 @@ export function WbrBuilder() {
 
   useEffect(() => { setOverrideFor(null); setReason(''); }, [fw]);
 
-  const save = (patch: Partial<WbrDraft>) => { if (d) void db.kv.put({ key: KEY(fw), value: { ...d, ...patch, edited: true } }); };
+  const save = (patch: Partial<WbrDraft>) => { if (d && !locked) void db.kv.put({ key: KEY(fw), value: { ...d, ...patch, edited: true } }); };
   const setTheme = (i: number, patch: Partial<WbrDraft['themes'][number]>) => d && save({ themes: d.themes.map((t, j) => (j === i ? { ...t, ...patch } : t)) });
   const move = (from: number, to: number) => {
     if (!d || to < 0 || to >= d.themes.length) return;
@@ -141,6 +143,8 @@ export function WbrBuilder() {
             </Card>
           </div>
 
+          {locked && <p role="status" className="rounded-lg bg-watch px-3 py-2 text-sm text-watch-ink">FW{fw} is locked: the slide is read-only (export still works). Unlock the week on the Data Manager to edit.</p>}
+          <fieldset disabled={locked} className="contents">
           <Card title={`Slide content · ${included} of ${MAX_THEMES} themes`}>
             <div className="mb-3 grid grid-cols-2 gap-3">
               <label className="text-sm"><span className="text-xs text-muted">Title</span>
@@ -154,7 +158,7 @@ export function WbrBuilder() {
                 const over = t.line.length > LINE_LIMIT;
                 return (
                   <li key={t.id} draggable onDragStart={() => setDragIdx(i)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragIdx !== null) move(dragIdx, i); setDragIdx(null); }}
-                    className={cx('grid grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-2 rounded-lg border p-2', t.include ? 'border-border bg-surface' : 'border-dashed border-border bg-surface-2 opacity-70', dragIdx === i && 'ring-2 ring-calls')}>
+                    className={cx('grid grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-2 rounded-lg border p-2', t.include ? 'border-border bg-surface' : 'border-dashed border-border bg-surface-2', dragIdx === i && 'ring-2 ring-calls')}>
                     <div className="flex flex-col items-center gap-0.5 pt-1">
                       <span className="cursor-grab text-muted" aria-hidden title="Drag to reorder">⋮⋮</span>
                       <button type="button" aria-label={`Move ${themeName(t.id, data.ds.taxonomy)} up`} className="text-xs text-muted hover:text-ink" onClick={() => move(i, i - 1)}>▲</button>
@@ -214,6 +218,7 @@ export function WbrBuilder() {
               )}
             </Card>
           </div>
+          </fieldset>
         </div>
       </PageGate>
     </>

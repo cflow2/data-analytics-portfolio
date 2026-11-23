@@ -19,7 +19,7 @@ export function RedactionRulesEditor() {
     <div>
       <p className="mb-2 text-xs text-muted">Rules run in order on every import. New rules apply to files imported from now on. Tokens can reference capture groups, e.g. <code>$1[name]</code>.</p>
       <table className="w-full text-sm">
-        <thead className="text-left text-xs text-muted"><tr><th className="pb-1 font-medium">On</th><th className="pb-1 font-medium">Rule</th><th className="pb-1 font-medium">Pattern (regex)</th><th className="pb-1 font-medium">Replace with</th><th /></tr></thead>
+        <thead className="text-left text-xs text-muted"><tr><th className="pb-1 font-medium">On</th><th className="pb-1 font-medium">Rule</th><th className="pb-1 font-medium">Pattern (regex)</th><th className="pb-1 font-medium">Replace with</th><th><span className="sr-only">Actions</span></th></tr></thead>
         <tbody>
           {rules.map((r, i) => (
             <tr key={r.id} className="border-t border-border align-top">

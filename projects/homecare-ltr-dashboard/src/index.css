@@ -18,14 +18,14 @@
   --c-border: #dce1e8;
   --c-calls: #0d4e9e;
   --c-calls-soft: #e3ecf8;
-  --c-surveys: #b8560f;
+  --c-surveys: #a64d0d; /* brief: #B8560F, darkened for WCAG AA text on tints */
   --c-surveys-bar: #e07a1f;
   --c-surveys-soft: #fbeadb;
-  --c-grow: #1f7a5a;
+  --c-grow: #1a6b4f; /* brief: #1F7A5A, darkened for WCAG AA text on tints */
   --c-grow-soft: #dff1e9;
   --c-watch: #f2d9a6;
   --c-watch-ink: #5c3d00;
-  --c-act: #b8560f;
+  --c-act: #a64d0d;
   --c-stable: #e6e9ee;
   --c-focus: #0d4e9e;
   color-scheme: light;

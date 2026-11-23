@@ -9,6 +9,9 @@ describe('number verification', () => {
     const hits = verifyNumbers('LTR 94.7% on 131 surveys, 8 detractors', [94.6564, 131, 7]);
     expect(hits.map((h) => [h.value, h.ok])).toEqual([[94.7, true], [131, true], [8, false]]);
   });
+  it('dates are not data claims', () => {
+    expect(extractNumbers('FW40 Oct 31–Nov 6 · WBR Nov 11, called 11/6/2026, 7 calls').map((h) => h.value)).toEqual([7]);
+  });
   it('always-ok constants', () => {
     expect(verifyNumbers('scored 0–6', [], [0, 6]).every((h) => h.ok)).toBe(true);
   });

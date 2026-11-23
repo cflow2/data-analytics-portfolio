@@ -80,7 +80,7 @@ export function VocThemes() {
         const th = r.tag?.primary;
         if (!th || th === 'other') return <span className="text-xs text-muted">—</span>;
         const pinned = v.pins[th] === r.s.id;
-        return presentation ? (pinned ? <span className="text-xs">Pinned</span> : null) : (
+        return presentation || ds.weeks.get(r.s.fw)?.locked ? (pinned ? <span className="text-xs">Pinned</span> : null) : (
           <Button variant={pinned ? 'primary' : 'ghost'} className="h-7 px-2 text-xs" onClick={(e) => { e.stopPropagation(); void togglePin(v.fw, th, r.s.id); }}
             title={pinned ? 'Unpin' : v.pins[th] ? `Replace the pinned ${tname(th)} quote` : `Pin as the ${tname(th)} quote for the WBR`}>
             {pinned ? 'Pinned' : 'Pin'}
@@ -141,7 +141,7 @@ export function VocThemes() {
             {([['service-add', 'Service-add requests', v.serviceAdd], ['aging', 'Aging in place / accessibility', v.aging]] as const).map(([id, title, list]) => (
               <Card key={id} title={<span className="flex items-center gap-2">{title} <StatusPill status="GROW" /> <span className="text-xs font-normal text-muted">last 4 weeks · {list.length}</span></span>}>
                 {list.length === 0 ? <p className="text-sm text-muted">None in FW{v.fw - 3}–FW{v.fw}.</p> : (
-                  <ul className="max-h-72 space-y-2 overflow-y-auto text-sm">
+                  <ul className="max-h-72 space-y-2 overflow-y-auto text-sm" tabIndex={0}>
                     {list.slice(0, 40).map((s) => (
                       <li key={s.id} className="border-l-2 border-grow pl-2">
                         <div className="text-xs text-muted tnum">FW{s.fw} · {monthDay(s.date)} · {storeLabel(s.storeNo, ds.stores)} · score {s.ltr ?? '—'}</div>

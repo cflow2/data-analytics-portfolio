@@ -74,7 +74,7 @@ export function Chart({ title, option, table, height = 260, ariaLabel, className
         </div>
       </header>
       {asTable ? (
-        <div className="overflow-auto" style={{ maxHeight: height + 40 }}>
+        <div className="overflow-auto" tabIndex={0} style={{ maxHeight: height + 40 }}>
           <table className="w-full text-sm tnum">
             <thead className="sticky top-0 bg-surface text-left text-xs text-muted"><tr>{table.columns.map((c) => <th key={c} className="py-1 pr-3 font-medium">{c}</th>)}</tr></thead>
             <tbody>{table.rows.map((r, i) => <tr key={i} className="border-t border-border">{r.map((c, j) => <td key={j} className="py-1 pr-3">{c ?? '—'}</td>)}</tr>)}</tbody>

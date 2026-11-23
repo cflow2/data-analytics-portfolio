@@ -59,14 +59,14 @@ export function DailyPulse() {
             </Card>
             <Card title={`New detractors · ${f.detractors.length}`}>
               {f.detractors.length === 0 ? <p className="text-sm text-muted">None.</p> : (
-                <ul className="max-h-56 space-y-1 overflow-y-auto text-sm tnum">
+                <ul className="max-h-56 space-y-1 overflow-y-auto text-sm tnum" tabIndex={0}>
                   {f.detractors.map(({ s, store, cause }) => <li key={s.id}><span className={cx('font-semibold', s.ltr! <= 6 && 'text-surveys')}>{s.ltr}</span> · {store}{cause && <span className="text-muted"> · {cause}</span>}</li>)}
                 </ul>
               )}
             </Card>
             <Card title={`Damage & safety · ${f.damage.length}`}>
               {f.damage.length === 0 ? <p className="text-sm text-muted">None.</p> : (
-                <ul className="max-h-56 space-y-1.5 overflow-y-auto text-sm">
+                <ul className="max-h-56 space-y-1.5 overflow-y-auto text-sm" tabIndex={0}>
                   {f.damage.map(({ c, store, escalated }) => (
                     <li key={c.id}><div className="text-xs text-muted">Case {c.caseNo} · {store} · <span className={escalated ? 'text-grow' : 'text-surveys'}>{escalated ? 'escalated' : 'not escalated'}</span></div>
                       <RedactedText recordId={c.id} field="notes" text={splitCallNotes(c.notes).reason} className="text-xs" /></li>

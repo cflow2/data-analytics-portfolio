@@ -2,37 +2,63 @@
 
 A local, single-page analytics app for HomeCare+ LTR reporting, Voice of the Customer (Medallia survey comments) and Contact Center (Loyalty Case) analysis, the Wednesday WBR slide and the daily pulse.
 
-- Runs entirely on your laptop. No server, no login, no telemetry, no CDNs.
+- Runs entirely on your laptop. No server, no login, no AI, no telemetry, no CDNs; outbound network is blocked.
 - Data lives in this browser's IndexedDB. Export or import a JSON backup from **Data Manager**.
-- `npm run build` produces **one self-contained HTML file** (`dist/index.html`). Double-click it to open it offline.
+- `npm run build` produces **one self-contained HTML file** (`dist/index.html`, ~2.7 MB). Double-click it to open it offline.
 
-> **Status:** phases 1–6 of 7 are complete (phase 5 built without AI — see below). See [Build status](#build-status).
+> **Status:** all 7 build phases complete (phase 5 built without AI — see [No AI, no network](#no-ai-no-network)).
 
-## Setup
+## Quick start (on the work laptop)
+
+1. Copy `dist/index.html` somewhere permanent (e.g. `Documents\HomeCare\`) and open it in Edge or Chrome by double-clicking.
+2. **Data Manager → Load demo data** to look around, then **Remove demo** before loading real files.
+3. Drop this week's files on **Data Manager** (see [Uploading files](#uploading-files-data-manager)).
+
+Your data stays in the browser profile for `file://` pages. Replacing `index.html` with a newer build keeps it. Clearing browser data, or using a different browser or profile, does not, so **export a backup** from Data Manager regularly (it contains original, unredacted text — keep it on the work laptop).
+
+## Weekly workflow
+
+| When | What | Where |
+|---|---|---|
+| **Daily, morning** | Pick today's date; read or copy the 60-second script (Monday covers the weekend). | **Daily Pulse** |
+| **Monday** | Upload the LTR Tracker, Medallia Responses export, Analytics report, Customer Commentary, all Loyalty Case files for the week (import calls into the fiscal week), the detractor follow-up file, and a Store→District CSV if stores show as Unmapped. Read each file's validation report. | **Data Manager** |
+| **Tuesday** | 1. Check **Command Center** alerts. 2. Clear the **Review Queue** (low-confidence tags, uncertain redaction; add phrases to the rules as you go). 3. Skim **VOC Themes** and **Contact Center**; pin one quote per theme; escalate damage calls. 4. Update the **Signal Register** on Cross-Channel. 5. Build the slide in **WBR Builder**: pick and order themes, edit lines (≤ 85 characters, numbers checked), resolve the pre-flight, download the .pptx. | Several |
+| **Wednesday** | Present the slide (or use **Present** mode). Log every leadership question in the **WBR Builder → Leadership questions log**; next week's speaker notes open with them, answered from that week's data. | WBR Builder |
+| **After the WBR** | Lock the week on **Data Manager** (read-only) and export a backup. | Data Manager |
+
+## Setup (development)
 
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # Vitest: business rules, fiscal calendar, demo baselines
+npm test           # Vitest: rules, calendar, parsers, redaction, tagging, writing, Ask, WBR/PPTX (151+ tests)
 npm run lint
+npm run typecheck
 npm run build      # → dist/index.html (single file, works from file://)
+npm run e2e        # quality checklist against dist/index.html (needs Playwright + Chromium)
+npm run e2e:a11y   # axe accessibility audit, every screen, light + dark (needs Playwright)
 ```
 
-Requires Node 20+.
+Requires Node 20+. The two `e2e` scripts need Playwright (`npm i -D playwright && npx playwright install chromium`, or `CHROMIUM=/path/to/chrome`); they aren't in `package.json` because the app itself doesn't need them.
 
-## Business rules (where they live)
+## Business rules (where they live, how to change them)
 
-| Rule | File | Guarded by |
+| Rule | File / setting | Guarded by |
 |---|---|---|
 | LTR % = 9–10 ÷ all valid 0–10 scores (not NPS) | `src/lib/ltr.ts` | `src/lib/ltr.test.ts` |
 | Detractor = 0–8; secondary split 0–6 / 7–8 | `src/lib/ltr.ts` | `src/lib/ltr.test.ts` |
-| Sample-size flags (<5 No trend, 5–9 Directional, ≥30 Strong); no color when n<5 | `src/lib/ltr.ts` (thresholds editable in Settings) | `src/lib/ltr.test.ts` |
-| Benchmark 93% | Settings | — |
-| FY26 4-5-4 calendar, Sat–Fri weeks, FW1 = 2026-01-31, WBR = week end + 5 days | `src/lib/fiscal.ts` (FY start editable in Settings) | `src/lib/fiscal.test.ts` |
-| Theme taxonomy, keyword rules, default status | `src/domain/taxonomy.ts` (Settings editor in phase 4) | phase 4 |
-| Regions, store/district normalisation | `src/domain/geo.ts` | `src/domain/geo.test.ts` |
+| Sample-size flags (<5 No trend, 5–9 Directional, ≥30 Strong); no colour when n < 5 | `src/lib/ltr.ts`; thresholds in **Settings** | `src/lib/ltr.test.ts` |
+| Benchmark 93% | **Settings** | — |
+| 4-5-4 calendar, Sat–Fri weeks, FW1 = 2026-01-31, WBR = week end + 5 days, quarter = ⌈FW ÷ 13⌉ | `src/lib/fiscal.ts`; FY start in **Settings** (for FY27) | `src/lib/fiscal.test.ts` (also checked against the Tracker's `Fiscal Calendar` sheet on import) |
+| LTR source of truth = Tracker `Likelihood to Recommend`; `Score` (100/0) is checked, not used | `src/ingest/parse.ts`, `src/domain/survey.ts` | `src/ingest/pipeline.test.ts` |
+| District from the store→district mapping, never from Lowe's Market | `src/ingest/parse.ts` | `src/ingest/tracker.test.ts` |
+| Follow-up: Documented only when member contact is described; blank = Missing; voicemail = Documented | `src/ingest/followup.ts` | `src/ingest/specs.test.ts` |
+| Theme taxonomy, keyword rules, default status | **Settings → Theme taxonomy** (stored); defaults in `src/domain/taxonomy.ts` | `src/tagging/engine.test.ts` |
+| Primary-theme precedence, sub-tags, contact type, cancellation | `src/tagging/engine.ts` | `src/tagging/engine.test.ts` |
+| Redaction rules | **Settings → Redaction rules**; defaults in `src/ingest/redact.ts` | `src/ingest/redact.test.ts` |
+| Evidence maturity (Emerging / Repeated / Corroborated / Validated, 4-week window) | `src/analytics/themes.ts` | `src/analytics/themes.test.ts` |
 
-**Changing a rule:** edit the file, update its test, and run `npm test`. The LTR and detractor guard tests are written to fail if either rule changes, on purpose.
+**Changing a coded rule:** edit the file, update its test, run `npm test`, then `npm run build`. The LTR and detractor guard tests fail on purpose if either rule changes. Settings-based rules (benchmark, thresholds, FY start, taxonomy, redaction) change without a rebuild.
 
 ## Uploading files (Data Manager)
 
@@ -48,7 +74,7 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 | Detractor follow-up (`FW40.xlsx`, or the Tracker's `Detractors` tab) | `LL, Score, Comment, Store, SM, Insights, Region, FW, FQ, FP` (header on row 1) | Insights → **Documented** only when contact with the member is described (called, contacted, spoke, left a voicemail, “customer confirmed…”); emails, plans (“I will call…”, “store asked to contact…”) and internal reviews/coaching → **Email only**; blank → **Missing**; detractors absent from the file → **Missing**. Names in the SM column are redacted wherever they appear. FQ/FP are checked against the calendar. |
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
 
-Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). Locked weeks are read-only.
+Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, pins, notes, headline or WBR edits (exports still work; untagged records still get their first rule tags).
 
 Each import produces a **validation report**: rows read/kept/dropped and why, dates found vs the selected week, duplicate cases, Call Driver typo mapping, Score vs LTR disagreements, the Tracker non-promoter count vs the follow-up file (naming missing surveys), unmapped stores, and redaction counts.
 
@@ -93,6 +119,14 @@ There is no AI provider: the work laptop has no API key or approved gateway, so 
 - **Writing** (slide theme lines ≤ 85 characters, the LTR callout, what-changed summary, speaker notes) is generated from one `weekFacts` object, so every number comes from the data. A **number checker** flags any figure in edited text that doesn't match (percentages must match percentages).
 - The page's content-security policy blocks all outbound connections (`connect-src 'self' data: blob:`).
 
+## Known issue: SheetJS version
+
+The app uses `xlsx` 0.18.5 from npm, which has two published advisories (prototype pollution and ReDoS when parsing a *maliciously crafted* file). The risk here is low (only your own exports are opened, parsing runs in a worker, and the page can't reach the network), but the fixed version is only distributed by SheetJS. On a machine that can reach it:
+
+```bash
+npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz && npm test && npm run build
+```
+
 ## Calculation notes
 
 - Multi-week figures (FYTD, 4-week average, months, quarters, rolling 4-week) **pool counts** (promoters ÷ n); they never average weekly percentages.
@@ -127,14 +161,51 @@ src/
   pages/        one file per screen
 ```
 
+## Quality checklist
+
+Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `e2e` = `npm run e2e`; `a11y` = `npm run e2e:a11y`.
+
+| Item | Status | Evidence |
+|---|---|---|
+| Demo: FW40 LTR 94.7%, n=131, 7 detractors (2 at 0–6); FYTD 93.1% on 3,736 | ✅ | unit `demo/generate.test.ts`, `analytics/analytics.test.ts`; e2e (both "Load demo data" and importing the demo source files) |
+| `fiscalWeek` values, FW40 WBR Nov 11, month 10, Q4 | ✅ | unit `lib/fiscal.test.ts` |
+| LTR = 9–10 ÷ valid scores; detractor = 0–8; tests fail if changed | ✅ | unit `lib/ltr.test.ts` (guard tests) |
+| Every LTR % shows n (screens, tooltips, exports) | ✅ | `PctN`/KPI cards everywhere; CSV/XLSX add n columns; WBR pre-flight check “Every LTR % shows n” |
+| No colour where n < 5 | ✅ | `canColor` in heat tables, trend points, region multiples, attribute strip |
+| Calls outside the week excluded and counted | ✅ | unit `ingest/pipeline.test.ts`; e2e |
+| Associate/store calls never in VOC | ✅ | unit `tagging/engine.test.ts`, `analytics/themes.test.ts` |
+| Survey and call counts never blended into a rate; channel split shown | ✅ | `analytics/voc.ts`, butterfly/table/WBR formats; unit tests |
+| Detractors dated after Friday only in “Next week preview” | ✅ | Detractors screen (FW+1 box); counted only in their own week |
+| Tracker header on row 3 / ~300 columns; Loyalty files with mixed sheets, text dates, newline Case # | ✅ | unit `ingest/pipeline.test.ts`, `ingest/tracker.test.ts`; verified on a real FY26 Tracker |
+| Same file twice → no duplicates | ✅ | unit + e2e |
+| Renamed column → mapping dialog, remembered | ✅ | unit + e2e |
+| 10,000 surveys + 2,000 calls < 3 s without freezing | ✅ | browser: 0.73 s, longest frame gap 19 ms during parsing (worker); writing 12k records afterwards pauses ≤ 0.25 s |
+| Redaction: CX/Caller/Spoke with:/Name:, phone formats, emails, order #s, addresses | ✅ | unit `ingest/redact.test.ts` (plus staff names, SM-column names, common first names) |
+| Presentation mode and every export contain no unredacted text | ✅ | unit `wbr/wbr.test.ts` unzips the PPTX and scans every part; e2e scans all presentation screens and the downloaded PPTX |
+| AI payload only redacted text and aggregates | n/a | No AI layer (no access); outbound network blocked by CSP |
+| No network requests | ✅ | e2e (zero requests; outbound `fetch` blocked) |
+| AI: invalid JSON retry, number verification, “not in the loaded data” | ✅ / n/a | No AI; number verification applies to all generated and edited text (`writing/verify.test.ts`); Ask says “not in the loaded data” (`ask/ask.test.ts`) |
+| PPTX opens with editable text, native chart, speaker notes | ✅ | unit + e2e check the file structure (1 slide, chart XML, notes) — open it in PowerPoint once to confirm |
+| Theme lines > 85 characters flagged | ✅ | unit + e2e (export blocked) |
+| Speaker notes start with “Last week I was asked about…” when questions are open | ✅ | unit `wbr/wbr.test.ts` |
+| Pre-flight blocks export until passed or overridden with a reason | ✅ | unit + e2e |
+| Every screen: loading, empty (names the file), error state | ✅ | `PageGate` + route `ErrorBoundary`; e2e checks every empty state |
+| Keyboard navigation; Ctrl+K palette | ✅ | e2e (palette navigation, visible focus, focus moves to content on navigation); drag-reorder has ▲/▼ buttons; Review Queue keys |
+| WCAG AA contrast, light and dark (axe) | ✅ | a11y: 14 screens × 2 themes, **no violations of any severity** |
+| No console errors/warnings; strict TS; lint; tests | ✅ | e2e console check; `npm run typecheck`, `npm run lint`, `npm test` |
+| `npm run build` → one HTML file that opens offline and shows the demo data | ✅ | e2e (file://); startup ≈ 0.3 s |
+| README with setup, weekly workflow, changing business rules | ✅ | this file |
+
+Two colour tokens are a shade darker than the brief to pass WCAG AA as text on tinted backgrounds: orange text `#A64D0D` (brief `#B8560F`) and green text `#1A6B4F` (brief `#1F7A5A`). Chart colours are as specified.
+
 ## Build status
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 Foundation | project, shell, routing, filter bar, theme, fiscal calendar, Dexie schema, demo data | ✅ done |
-| 2 Ingestion | 7 parsers in a Web Worker, fuzzy headers, mapping dialog, redaction, validation report | ✅ done |
-| 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ done |
-| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | ✅ done |
-| 5 Writing & Ask (no AI) | rule-based writing, number verification, local Ask with “Data used”; outbound network blocked | ✅ done |
-| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | ✅ done |
-| 7 Hardening | performance, accessibility, quality checklist, weekly workflow docs | next |
+| 1 Foundation | project, shell, routing, filter bar, theme, fiscal calendar, Dexie schema, demo data | ✅ |
+| 2 Ingestion | 7 parsers in a Web Worker, fuzzy headers, mapping dialog, redaction, validation report | ✅ |
+| 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ |
+| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | ✅ |
+| 5 Writing & Ask (no AI) | rule-based writing, number verification, local Ask | ✅ |
+| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | ✅ |
+| 7 Hardening | accessibility (axe), performance, locked weeks read-only, error boundary, e2e checklist, docs | ✅ |

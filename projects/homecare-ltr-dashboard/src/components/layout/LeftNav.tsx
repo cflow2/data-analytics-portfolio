@@ -62,15 +62,15 @@ export function LeftNav() {
         ))}
       </div>
       <div className="border-t border-border py-2">
-        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={() => setPaletteOpen(true)} aria-label="Open command palette (Ctrl+K)">
+        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={() => setPaletteOpen(true)} aria-label={collapsed ? 'Search (Ctrl+K)' : undefined} title="Search screens, weeks and stores (Ctrl+K)">
           <Icon name="search" size={17} />
           {!collapsed && <><span className="flex-1 text-left">Search</span><kbd className="rounded border border-border px-1 text-[11px]">Ctrl K</kbd></>}
         </button>
-        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={cycleTheme} aria-label={`Theme: ${theme}. Click to change.`}>
+        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={cycleTheme} aria-label={collapsed ? `Theme: ${theme}` : undefined} title="Change theme (light / dark / system)">
           <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={17} />
           {!collapsed && <span className="capitalize">Theme: {theme}</span>}
         </button>
-        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={() => setPresentation(true)} aria-label="Presentation mode">
+        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={() => setPresentation(true)} aria-label={collapsed ? 'Present' : undefined} title="Presentation mode (← → to change screens, Esc to exit)">
           <Icon name="present" size={17} />
           {!collapsed && <span>Present</span>}
         </button>

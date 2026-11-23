@@ -70,7 +70,7 @@ export function ReviewQueue() {
   const choose = useCallback(async (themeId: string) => {
     if (!item || !rec || item.kind !== 'low-confidence' || item.channel === 'followup') return;
     const changed = tag?.primary !== themeId;
-    await saveManualTag(item.recordId, item.channel, rec.fw, { primary: themeId }, tag);
+    try { await saveManualTag(item.recordId, item.channel, rec.fw, { primary: themeId }, tag); } catch (e) { setMsg((e as Error).message); setTimeout(() => setMsg(null), 4000); return; }
     const sel = window.getSelection()?.toString().trim() ?? '';
     if (changed && themeId !== 'other') { setPhrase({ theme: themeId, text: sel }); setDone((d) => new Set(d).add(item.key)); }
     else next(true);
@@ -78,7 +78,7 @@ export function ReviewQueue() {
 
   const accept = useCallback(async () => {
     if (!item) return;
-    if (item.kind === 'low-confidence' && tag) await markReviewed(tag);
+    if (item.kind === 'low-confidence' && tag) { try { await markReviewed(tag); } catch (e) { setMsg((e as Error).message); setTimeout(() => setMsg(null), 4000); return; } }
     if (item.kind === 'redaction') {
       const table = item.channel === 'survey' ? db.surveys : item.channel === 'call' ? db.calls : db.followups;
       await (table as typeof db.surveys).update(item.recordId, { redactionUncertain: false });

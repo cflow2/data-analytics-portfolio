@@ -105,7 +105,7 @@ export function CrossChannel() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm tnum">
                 <thead className="text-left text-xs text-muted">
-                  <tr>{['Signal', 'Theme', 'First seen', 'Weeks seen', `Surveys FW${v.fw}`, `Calls FW${v.fw}`, 'Maturity', 'Status', 'Owner', 'Next action', 'Notes', ''].map((h) => <th key={h} className="px-1.5 py-1.5 font-medium">{h}</th>)}</tr>
+                  <tr>{['Signal', 'Theme', 'First seen', 'Weeks seen', `Surveys FW${v.fw}`, `Calls FW${v.fw}`, 'Maturity', 'Status', 'Owner', 'Next action', 'Notes', ''].map((h) => <th key={h} className="px-1.5 py-1.5 font-medium">{h || <span className="sr-only">Actions</span>}</th>)}</tr>
                 </thead>
                 <tbody>
                   {ds.signals.length === 0 && <tr><td colSpan={12} className="py-6 text-center text-muted">No signals yet. Add one, or use a suggestion above.</td></tr>}

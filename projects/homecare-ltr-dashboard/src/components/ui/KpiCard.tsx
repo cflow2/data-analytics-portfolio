@@ -21,7 +21,7 @@ export function KpiCard({ label, value, sub, delta, deltaUnit = 'pts', deltaDigi
   return (
     <article className={cx('flex flex-col rounded-[12px] border border-border bg-surface p-4', className)} aria-label={label}>
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-xs font-medium text-muted">{label}</h3>
+        <h2 className="text-xs font-medium text-muted">{label}</h2>
         {spark && <Sparkline values={spark} faded={sparkFaded} color="var(--c-calls)" label={`${label} trend, last ${spark.length} weeks`} />}
       </div>
       <div className="mt-1 flex items-baseline gap-2 font-display text-[28px] font-semibold leading-tight tnum">

@@ -69,7 +69,7 @@ export function StoreDrawer({ storeNo, fw, onClose }: { storeNo: string; fw: num
         )}
       </Card>
       <Card title={`Surveys · ${v.surveys.length}`}>
-        <ul className="max-h-80 divide-y divide-border overflow-y-auto text-sm">
+        <ul className="max-h-80 divide-y divide-border overflow-y-auto text-sm" tabIndex={0}>
           {v.surveys.map((s) => {
             const tag = ds.tags.get(s.id);
             return (
@@ -86,7 +86,7 @@ export function StoreDrawer({ storeNo, fw, onClose }: { storeNo: string; fw: num
       </Card>
       <Card title={`Calls mentioning this store · ${v.calls.length}`}>
         {v.calls.length === 0 ? <p className="text-sm text-muted">No call notes mention store #{storeNo}.</p> : (
-          <ul className="max-h-72 divide-y divide-border overflow-y-auto text-sm">
+          <ul className="max-h-72 divide-y divide-border overflow-y-auto text-sm" tabIndex={0}>
             {v.calls.map((c) => (
               <li key={c.id} className="py-1.5">
                 <div className="flex gap-2 text-xs text-muted"><span>{monthDay(c.date)} · FW{c.fw}</span><span>{c.driver}</span>{ds.tags.get(c.id) && <span className="rounded bg-surface-2 px-1.5">{themeName(ds.tags.get(c.id)!.primary)}</span>}</div>

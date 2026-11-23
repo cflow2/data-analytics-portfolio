@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { LeftNav } from './LeftNav';
 import { FilterBar } from './FilterBar';
@@ -8,6 +8,7 @@ import { SCREENS } from '@/screens';
 import { Button, cx } from '@/components/ui/primitives';
 import { useSelectedWeek } from '@/hooks/useWeek';
 import { DatasetProvider } from '@/data/dataset';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 export function AppShell() {
   const presentation = useUi((s) => s.presentation);
@@ -15,6 +16,13 @@ export function AppShell() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const week = useSelectedWeek();
+
+  // Move keyboard focus to the content on every screen change (keyboard and screen-reader users land on the new screen).
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    document.getElementById('main')?.focus({ preventScroll: true });
+  }, [pathname]);
 
   // Presentation mode: arrow keys move between screens, Esc exits.
   useEffect(() => {
@@ -47,9 +55,9 @@ export function AppShell() {
             </div>
           </div>
         ) : <FilterBar />}
-        <main id="main" className={cx('flex-1 overflow-y-auto', presentation ? 'px-10 py-8' : 'px-6 py-6')} tabIndex={-1}>
+        <main id="main" className={cx('flex-1 overflow-y-auto outline-none', presentation ? 'px-10 py-8' : 'px-6 py-6')} tabIndex={-1}>
           <div className="mx-auto max-w-[1360px]">
-            <Outlet />
+            <ErrorBoundary resetKey={pathname}><Outlet /></ErrorBoundary>
           </div>
         </main>
       </div>

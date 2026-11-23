@@ -3,6 +3,7 @@ import type { Channel, Sentiment, ThemeTag } from '@/domain/types';
 import type { ThemeDef } from '@/domain/taxonomy';
 import { saveManualTag } from '@/tagging/manual';
 import { useUi } from '@/state/ui';
+import { useIsLocked } from '@/hooks/useLocked';
 import { cx } from '@/components/ui/primitives';
 
 const SOURCE_CLS: Record<string, string> = { Manual: 'bg-grow-soft text-grow', AI: 'bg-calls-soft text-calls', Rule: 'bg-stable text-muted', Demo: 'bg-stable text-muted' };
@@ -19,9 +20,14 @@ export function SourceBadge({ tag }: { tag?: ThemeTag }) {
 /** Inline override: primary, secondary (up to 3) and sentiment. Saved as "Manual". */
 export function TagEditor({ recordId, channel, fw, tag, taxonomy, compact }: { recordId: string; channel: Channel; fw: number; tag?: ThemeTag; taxonomy: ThemeDef[]; compact?: boolean }) {
   const presentation = useUi((s) => s.presentation);
+  const locked = useIsLocked(fw);
   const [open, setOpen] = useState(false);
   const name = (id: string) => taxonomy.find((t) => t.id === id)?.name ?? id;
-  if (presentation) return <span className="text-xs">{tag ? name(tag.primary) : '—'}</span>;
+  if (presentation || locked) return (
+    <span className="text-xs" title={locked ? `FW${fw} is locked (read-only)` : undefined}>
+      {tag ? [tag.primary, ...tag.secondary].map(name).join(' + ') : 'Untagged'}{tag && ` · ${tag.sentiment}`}{tag?.subTag && ` · ${tag.subTag}`}{locked && !presentation && <span className="ml-1 text-muted">· locked</span>}
+    </span>
+  );
   const save = (patch: Parameters<typeof saveManualTag>[3]) => saveManualTag(recordId, channel, fw, patch, tag);
   return (
     <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>

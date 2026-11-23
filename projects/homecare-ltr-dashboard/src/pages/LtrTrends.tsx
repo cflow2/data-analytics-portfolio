@@ -13,6 +13,7 @@ import { monthDay } from '@/lib/dates';
 import { REGIONS } from '@/domain/geo';
 import { useSettings } from '@/state/settings';
 import { useUi } from '@/state/ui';
+import { useIsLocked } from '@/hooks/useLocked';
 import { Chart, useBaseOption } from '@/components/charts/Chart';
 import { useChartTokens } from '@/components/charts/tokens';
 import { DataTable, type Col } from '@/components/ui/DataTable';
@@ -21,8 +22,9 @@ import { Card, Delta, PageHeader, PctN, SampleBadge, Segmented } from '@/compone
 
 function NoteCell({ fw, note }: { fw: number; note?: string }) {
   const presentation = useUi((s) => s.presentation);
+  const locked = useIsLocked(fw);
   const [v, setV] = useState(note ?? '');
-  if (presentation) return <span>{note}</span>;
+  if (presentation || locked) return <span title={locked ? 'Week locked' : undefined}>{note}</span>;
   return (
     <input
       value={v} onChange={(e) => setV(e.target.value)} placeholder="Add a note…" aria-label={`Note for FW${fw}`}

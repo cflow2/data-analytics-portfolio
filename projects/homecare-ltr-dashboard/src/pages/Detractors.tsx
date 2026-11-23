@@ -19,11 +19,13 @@ import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, PageHeader, Select, cx } from '@/components/ui/primitives';
 import { RedactedText } from '@/components/data/RedactedText';
 import { insightReason } from '@/ingest/followup';
+import { assertUnlocked } from '@/tagging/manual';
 
 const UNTAGGED = 'untagged';
 const label = (theme: string) => (theme === UNTAGGED ? 'Untagged' : themeName(theme));
 
 async function setRootCause(r: DetractorRow, theme: string, existing?: ThemeTag) {
+  await assertUnlocked(r.fw);
   await db.tags.put({
     recordId: r.id, channel: 'survey', fw: r.fw, primary: theme,
     secondary: (existing?.secondary ?? []).filter((x) => x !== theme), subTag: existing?.primary === theme ? existing.subTag : undefined,
@@ -79,7 +81,7 @@ export function Detractors() {
     { id: 'comment', header: 'Comment (redacted)', value: (r) => r.comment, sortable: false, width: '24%', cell: (r) => <RedactedText recordId={r.id} field="comment" text={r.comment} /> },
     { id: 'root', header: 'Root cause', value: (r) => label(r.rootCause ?? UNTAGGED), width: 170,
       exportExtra: [{ header: 'Root cause source', value: (r) => r.rootCauseSource ?? '' }],
-      cell: (r) => presentation ? label(r.rootCause ?? UNTAGGED) : (
+      cell: (r) => presentation || data.ds.weeks.get(r.fw)?.locked ? label(r.rootCause ?? UNTAGGED) : (
         <div>
           <select value={r.rootCause ?? ''} aria-label={`Root cause for survey ${r.id}`} onClick={(e) => e.stopPropagation()}
             onChange={(e) => e.target.value && void setRootCause(r, e.target.value, data.ds.tags.get(r.id))}

@@ -14,6 +14,7 @@ import { todayISO } from '@/lib/dates';
 import { canColor } from '@/lib/ltr';
 import { useSettings } from '@/state/settings';
 import { useUi } from '@/state/ui';
+import { useIsLocked } from '@/hooks/useLocked';
 import type { ValidationReport } from '@/ingest/types';
 import { KpiCard } from '@/components/ui/KpiCard';
 import { Butterfly } from '@/components/charts/Butterfly';
@@ -24,7 +25,8 @@ import { Icon } from '@/components/ui/Icon';
 const SPARK_WEEKS = 8;
 
 function Headline({ fw, suggested, saved }: { fw: number; suggested: string; saved?: string }) {
-  const presentation = useUi((s) => s.presentation);
+  const presentation = useUi((s) => s.presentation) || false;
+  const locked = useIsLocked(fw);
   const [text, setText] = useState(saved ?? suggested);
   const [editing, setEditing] = useState(false);
   useEffect(() => setText(saved ?? suggested), [saved, suggested, fw]);
@@ -35,7 +37,7 @@ function Headline({ fw, suggested, saved }: { fw: number; suggested: string; sav
   };
   return (
     <Card className="col-span-3" title={<span className="flex items-center gap-2">Headline · FW{fw} <span className="text-xs font-normal text-muted">{saved ? 'saved' : 'rule-generated, not saved'}</span></span>}
-      actions={!presentation && !editing && (
+      actions={!presentation && !locked && !editing && (
         <>
           <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditing(true)}>Edit</Button>
           {saved !== suggested && <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => setText(suggested)} title="Replace with the rule-generated sentence">Use rule sentence</Button>}

@@ -205,7 +205,7 @@ export function ContactCenter() {
           <div className="grid grid-cols-3 gap-3">
             <Card title={`Damage & safety queue · ${v.damage.length}`} className="col-span-2">
               {v.damage.length === 0 ? <p className="text-sm text-muted">No damage or safety calls in FW{v.fw}.</p> : (
-                <div className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto">
+                <div className="grid max-h-[520px] grid-cols-2 gap-2 overflow-y-auto" tabIndex={0}>
                   {v.damage.map((c) => {
                     const st: EscStatus = ds.escalations.get(c.id)?.status ?? 'New';
                     return (
@@ -230,7 +230,7 @@ export function ContactCenter() {
             </Card>
             <Card title={`Repeat callers · ${v.repeats.length}`}>
               <p className="mb-2 text-xs text-muted">Cases with 2+ calls this week, and callers (matched by a hashed phone number, never shown) on 2+ cases.</p>
-              <ul className="max-h-[470px] space-y-1.5 overflow-y-auto text-sm tnum">
+              <ul className="max-h-[470px] space-y-1.5 overflow-y-auto text-sm tnum" tabIndex={0}>
                 {v.repeats.slice(0, 60).map((g) => (
                   <li key={`${g.kind}${g.key}`} className="flex flex-wrap justify-between gap-x-2">
                     <span className="font-medium">{g.kind === 'case' ? `Case ${g.key}` : g.key}</span>

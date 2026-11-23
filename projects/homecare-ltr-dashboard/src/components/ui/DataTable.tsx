@@ -68,7 +68,7 @@ export function DataTable<T>({ rows, columns, getRowId, initialSort, maxHeight =
           </>
         )}
       </div>
-      <div ref={scroller} className="overflow-auto rounded-lg border border-border" style={{ maxHeight }}>
+      <div ref={scroller} tabIndex={0} aria-label={`${exportName.replace(/_/g, ' ')} table`} className="overflow-auto rounded-lg border border-border" style={{ maxHeight }}>
         <table className="w-full border-collapse text-sm tnum">
           <thead className="sticky top-0 z-10 bg-surface-2 text-left text-xs text-muted">
             {table.getHeaderGroups().map((hg) => (

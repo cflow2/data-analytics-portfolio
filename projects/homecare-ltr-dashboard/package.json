@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "HomeCare+ LTR & Customer Intelligence Dashboard — local, single-file analytics app",
+  "description": "HomeCare+ LTR & Customer Intelligence Dashboard \u2014 local, single-file analytics app",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -b --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e": "node e2e/checklist.cjs",
+    "e2e:a11y": "node e2e/a11y.cjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -39,6 +41,7 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.3.0",
+    "axe-core": "^4.14.1",
     "eslint": "^10.15.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.8",

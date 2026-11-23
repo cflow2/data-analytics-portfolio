@@ -66,7 +66,7 @@ function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSu
       <td className="tnum">{w.followups || '—'}</td>
       <td>
         <div className="flex items-center justify-end gap-1">
-          <Button variant="ghost" onClick={() => setWeekLocked(w.fw, !w.locked)} aria-label={`${w.locked ? 'Unlock' : 'Lock'} FW${w.fw}`} title={w.locked ? 'Locked: read-only. Click to unlock.' : 'Lock this week (read-only)'}>
+          <Button variant="ghost" onClick={() => setWeekLocked(w.fw, !w.locked)} aria-label={`${w.locked ? 'Locked' : 'Lock'} FW${w.fw}`} aria-pressed={w.locked} title={w.locked ? 'Locked: read-only. Click to unlock.' : 'Lock this week (read-only)'}>
             <Icon name="lock" size={14} /> <span className="text-xs">{w.locked ? 'Locked' : 'Lock'}</span>
           </Button>
           <Button variant="ghost" disabled={w.locked || busy} title="Re-apply the keyword rules to this week (Manual and AI tags are kept)"
@@ -177,7 +177,7 @@ export function DataManager() {
 
       <Card title="Weeks" className="mt-3">
         {weeks.loading ? <Skeleton className="h-32" /> : !weeks.data?.length ? <p className="text-sm text-muted">No weeks loaded yet. Drop files above or load the demo data.</p> : (
-          <div className="max-h-[380px] overflow-y-auto">
+          <div className="max-h-[380px] overflow-y-auto" tabIndex={0}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface text-left text-xs text-muted">
                 <tr><th className="py-1.5 font-medium">Week</th><th className="font-medium">LTR</th><th className="font-medium">Detractors (0–8)</th><th className="font-medium">Customer calls</th><th className="font-medium">Follow-ups</th><th className="text-right font-medium">Actions</th></tr>

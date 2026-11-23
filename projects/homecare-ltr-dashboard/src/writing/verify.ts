@@ -12,6 +12,9 @@ export function extractNumbers(text: string): NumberHit[] {
   for (const m of text.matchAll(NUM)) {
     const before = text.slice(Math.max(0, m.index! - 2), m.index!);
     if (/FW$|R$|Q$|M$|#$/i.test(before) || /FW\s$/i.test(before)) continue; // FW40, R5, Q4, store #1234
+    const word = text.slice(Math.max(0, m.index! - 5), m.index!);
+    if (/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s$/i.test(word)) continue; // dates: "Oct 31", "Nov 6"
+    if (/^\d+\/\d+/.test(text.slice(m.index!)) || /\d\/$/.test(text.slice(0, m.index!))) continue; // 11/6, 11/6/2026
     const raw = m[0];
     const value = Number(`${m[1].replace(/,/g, '')}${m[2] ? `.${m[2]}` : ''}`);
     out.push({ text: raw, value, start: m.index!, end: m.index! + raw.length, ok: false });

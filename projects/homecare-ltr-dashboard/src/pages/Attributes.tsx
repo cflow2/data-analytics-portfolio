@@ -96,7 +96,7 @@ export function Attributes() {
                         return (
                           <td key={w} className={cx('min-w-[78px] rounded-md px-2 py-1 text-center', !show && 'text-muted')} style={show ? { background: sequentialFill(x.pct!, sMin, sMax, t) } : undefined}
                             title={x.pct === null ? `FW${w}: no data` : `FW${w}: ${x.pct.toFixed(1)}% (n=${x.n})`}>
-                            {x.pct === null ? '—' : <><div className="text-ink">{x.pct.toFixed(1)}%</div><div className="text-[10px] text-muted">n={x.n}</div></>}
+                            {x.pct === null ? '—' : <><div className="text-ink">{x.pct.toFixed(1)}%</div><div className={cx('text-[11px]', show ? 'text-ink' : 'text-muted')}>n={x.n}</div></>}
                           </td>
                         );
                       })}

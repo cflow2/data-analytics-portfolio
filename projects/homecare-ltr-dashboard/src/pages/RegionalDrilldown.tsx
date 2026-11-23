@@ -153,7 +153,7 @@ export function RegionalDrilldown() {
                               {c.pct === null ? <span className="text-xs">—</span> : (
                                 <>
                                   <div className={cx('text-sm', colored && 'text-ink')}>{c.pct.toFixed(1)}%</div>
-                                  <div className="text-[11px] leading-tight text-muted">n={c.n}{colored ? (pos ? ' · ▲ above' : ' · ▼ below') : ' · no trend'}</div>
+                                  <div className={cx('text-[11px] leading-tight', colored ? 'text-ink' : 'text-muted')}>n={c.n}{colored ? (pos ? ' · ▲ above' : ' · ▼ below') : ' · no trend'}</div>
                                 </>
                               )}
                             </td>
