@@ -45,7 +45,7 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 | Medallia Analytics driver report (`Analytics - <timestamp>.xlsx`) | rows = measures, columns = days (`14 Sat` … `20 Fri`, `Total`, `Benchmark`) or weeks (`FW40`); a long `FW, Attribute, Top 2 Box %, n` layout also works | Day columns are dated from the export timestamp in the file name and rolled up to fiscal weeks weighted by each day's Sample Size (this reproduces Medallia's Total). Medallia labels map to the nine attributes (Project Value → Value for money, Ease of Process → Ease of process prior, Amount of Time… → Time to get an appointment, …). n = Sample Size. The LTR row is cross-checked against the Tracker; Benchmark is ignored. |
 | Customer Commentary | header on row 2; `date, score, comment` | Fills comments on matching Tracker surveys. |
 | Loyalty Cases | `Call Date, Call Driver, Case #, Case Notes` | Any sheet name, real or text dates, Case # newlines trimmed. You choose the week to import into; rows dated outside it are dropped and counted. |
-| Detractor follow-up (`FW40.xlsx`) | `LL, Score, Comment, Store, SM, Insights, …` | Insights classified Documented / Email only; detractors absent from the file are Missing. |
+| Detractor follow-up (`FW40.xlsx`, or the Tracker's `Detractors` tab) | `LL, Score, Comment, Store, SM, Insights, Region, FW, FQ, FP` (header on row 1) | Insights → **Documented** only when contact with the member is described (called, contacted, spoke, left a voicemail, “customer confirmed…”); emails, plans (“I will call…”, “store asked to contact…”) and internal reviews/coaching → **Email only**; blank → **Missing**; detractors absent from the file → **Missing**. Names in the SM column are redacted wherever they appear. FQ/FP are checked against the calendar. |
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
 
 Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). Locked weeks are read-only.
@@ -56,7 +56,7 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 
 ## Privacy
 
-- On import, comments, call notes and SM insights pass through a **redaction** step: emails, order numbers (12+ digits), US phone numbers, street addresses, and names after `CX`, `Caller`, `Spoke with:`, `Name:`, `Mr/Mrs/Ms`. Rules are editable in **Settings → Redaction rules** (with a test box).
+- On import, comments, call notes and SM insights pass through a **redaction** step: emails, order numbers (12+ digits), US phone numbers, street addresses, names after `CX`, `Caller`, `Spoke with:`, `Name:`, `Mr/Mrs/Ms`, names after `Store Manager`/`SM`/`technician`/`associate`, “First Last” before an action verb (“… reviewed”, “… contacted”), and every name listed in a follow-up file's SM column. “No Comment”-style placeholders are treated as blank. Rules are editable in **Settings → Redaction rules** (with a test box).
 - Original text is stored only in IndexedDB (`originals` table). The UI shows redacted text; "Show original" relocks after 60 s and is unavailable in Presentation mode.
 - Text where PII may remain (e.g. "spoke with bob jones") is flagged for the Review Queue.
 - Phone numbers are hashed with a per-install salt (for repeat-caller detection) and never displayed.

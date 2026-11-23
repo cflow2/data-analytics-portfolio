@@ -109,3 +109,10 @@ export function hashBytes(buf: ArrayBuffer): string {
 export function textKey(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
+
+/** Placeholder text that means "no comment" — treated as blank so no theme is ever inferred from it. */
+const PLACEHOLDER = /^(?:no comments?|none|n\/?a|na|null|-+|\.+|nothing|no feedback|nc)\.?$/i;
+export function cleanComment(v: unknown): string {
+  const t = cellText(v);
+  return PLACEHOLDER.test(t) ? '' : t;
+}

@@ -187,3 +187,28 @@ describe('analytics wide layout', () => {
     expect(aw.find((a) => a.id === '39:value')!.pct).toBeCloseTo(93);
   });
 });
+
+describe('real Detractors tab layout (made-up names)', () => {
+  it('parses, redacts staff names, classifies follow-up and flags FQ', () => {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+      ['LL', 'Score', 'Comment', 'Store', 'SM', 'Insights', 'Region', 'FW', 'FQ', 'FP'],
+      ['11/11/26', 0, 'This is a complete waste of time.', 502, 'Pat Example', 'Pat Example reviewed the concerns. Sam Sample reviewed the visit with the associate, Alex Demo. Sam Sample also contacted the customer and apologized.', 27, 41, 3, 10],
+      ['11/10/26', 7, '"The associate craftsmanship was top tier."', 2207, 'Jordan Placeholder', 'Email Sent to SM', 3, 41, 3, 10],
+      ['11/09/26', 7, 'I wanted my water tank heater flushed.', 268, 'Casey Testcase', 'I will call the customer and get their feedback.', 5, 41, 3, 10],
+      ['11/09/26', 5, 'No Comment', 2544, 'Riley Sample', 'Store Manager Riley Sample reviewed the detractor with technician Drew Example. Leadership believes it was a scope misunderstanding.', 18, 41, 3, 10],
+    ]), 'Detractors');
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const p = parseFile(req('FW41.xlsx', buf));
+    expect(p.candidate).toMatchObject({ kind: 'followup', headerIndex: 0, missing: [] });
+    const f = p.build!.followups;
+    expect(f.map((x) => x.status)).toEqual(['Documented', 'Email only', 'Email only', 'Email only']);
+    expect(f.map((x) => x.storeNo)).toEqual(['0502', '2207', '0268', '2544']);
+    expect(f.map((x) => x.region)).toEqual(['R27', 'R3', 'R5', 'R18']);
+    expect(f[3].comment).toBe('');
+    const insights = f.map((x) => x.insights).join(' ');
+    expect(insights).not.toMatch(/Pat|Sam Sample|Alex Demo|Riley|Drew Example/);
+    expect(p.build!.report.warnings.join(' ')).toMatch(/FQ column differs from the fiscal calendar on 4 row\(s\) \(FW41: file FQ 3, calendar Q4\)/);
+    expect(p.build!.report.warnings.join(' ')).not.toMatch(/FP column/);
+  });
+});

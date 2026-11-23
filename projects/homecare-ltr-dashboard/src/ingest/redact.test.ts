@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redact, extractPhones, validateRule } from './redact';
+import { redact, extractPhones, validateRule, knownNamesRule, DEFAULT_REDACTION_RULES } from './redact';
 
 const r = (s: string) => redact(s).text;
 
@@ -48,5 +48,20 @@ describe('redaction', () => {
   it('extracts phones for hashing and validates rules', () => {
     expect(extractPhones('(704) 555-1234 and 1-980-555-0000')).toEqual(['7045551234', '9805550000']);
     expect(validateRule({ pattern: '(', flags: 'g' })).not.toBeNull();
+  });
+
+  it('staff names in SM insights (made-up names)', () => {
+    expect(r('Store Manager Pat Example reviewed the detractor with technician Sam Sample.')).toBe('Store Manager [name] reviewed the detractor with technician [name].');
+    expect(r('reviewed the visit with the associate, Alex Demo, and determined')).toBe('reviewed the visit with the associate, [name], and determined');
+    expect(r('Jordan Placeholder reviewed the concerns. Casey Testcase also contacted the customer.')).toBe('[name] reviewed the concerns. [name] also contacted the customer.');
+    expect(r('Store leadership contacted the customer.')).toBe('Store leadership contacted the customer.');
+    expect(r('Field Support reviewed the case.')).toBe('Field Support reviewed the case.');
+    expect(r('The RedVest Associate was friendly.')).toBe('The RedVest Associate was friendly.');
+    expect(r("Lowe's Associate Needs Assistance")).toBe("Lowe's Associate Needs Assistance");
+  });
+  it('names listed in the file are redacted wherever they appear', () => {
+    const rule = knownNamesRule(['Pat Example', 'Sam Sample', '', 'DEMO SM Avery'])!;
+    const rules = [...DEFAULT_REDACTION_RULES, rule];
+    expect(redact('Per Example, the member was happy. Sam Sample will follow up.', rules).text).toBe('Per [name], the member was happy. [name] will follow up.');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeHeader, parseDateCell, parseScore, cleanCaseNo, hashString } from './normalize';
+import { normalizeHeader, parseDateCell, parseScore, cleanCaseNo, hashString, cleanComment } from './normalize';
 
 describe('normalize', () => {
   it('headers: trim, case, curly quotes, spaces', () => {
@@ -36,5 +36,10 @@ describe('normalize', () => {
   it('hash is deterministic', () => {
     expect(hashString('abc')).toBe(hashString('abc'));
     expect(hashString('abc')).not.toBe(hashString('abd'));
+  });
+
+  it('placeholder comments are blank', () => {
+    for (const v of ['No Comment', 'no comments', 'N/A', '-', 'None.']) expect(cleanComment(v)).toBe('');
+    expect(cleanComment('No comment on the visit, but the price is high')).toBe('No comment on the visit, but the price is high');
   });
 });

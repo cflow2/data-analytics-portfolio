@@ -45,12 +45,25 @@ describe('call drivers', () => {
 });
 
 describe('follow-up insight classification', () => {
-  it('documented / email only / missing', () => {
+  it('documented only when contact with the member is described', () => {
     expect(classifyInsight('Called member 11/9, apologized and rescheduled.')).toBe('Documented');
     expect(classifyInsight('Spoke with member about exclusions')).toBe('Documented');
+    expect(classifyInsight('Store leadership contacted the customer, confirmed the issue stemmed from a broken tray.')).toBe('Documented');
+    expect(classifyInsight('Pat Example reviewed the concerns. Sam Sample also contacted the customer and apologized for the experience.')).toBe('Documented');
+    expect(classifyInsight('Left a voicemail for the member on 11/10.')).toBe('Documented');
+  });
+  it('emails, intentions and internal reviews are not documented contact', () => {
     expect(classifyInsight('Sent email to SM')).toBe('Email only');
+    expect(classifyInsight('Email Sent to SM')).toBe('Email only');
     expect(classifyInsight('Emailed')).toBe('Email only');
+    expect(classifyInsight('I will call the customer and get their feedback. I will also touch base with Pat.')).toBe('Email only');
+    expect(classifyInsight('Customer cited concerns with value and service quality. Store asked to contact customer and document findings/actions taken.')).toBe('Email only');
+    expect(classifyInsight('Store leadership reviewed the detractor experience with the associate and provided coaching on proper handling.')).toBe('Email only');
+    expect(classifyInsight('Store Manager reviewed the detractor with the technician. Leadership believes the dissatisfaction stemmed from a misunderstanding of scope.')).toBe('Email only');
+  });
+  it('blank-like values are Missing', () => {
     expect(classifyInsight('')).toBe('Missing');
     expect(classifyInsight('N/A')).toBe('Missing');
+    expect(classifyInsight('No Comment')).toBe('Missing');
   });
 });

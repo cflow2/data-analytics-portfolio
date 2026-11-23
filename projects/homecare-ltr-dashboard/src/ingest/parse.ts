@@ -4,7 +4,7 @@
  */
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
-import { fiscalWeek, fiscalWeekInYear } from '@/lib/fiscal';
+import { fiscalMonth, fiscalQuarter, fiscalWeek, fiscalWeekInYear } from '@/lib/fiscal';
 import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
@@ -13,10 +13,10 @@ import type {
 } from '@/domain/types';
 import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
-  cellText, cleanCaseNo, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
+  cellText, cleanCaseNo, cleanComment, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
 import { ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
-import { redact, extractPhones, type RedactionRule } from './redact';
+import { redact, extractPhones, knownNamesRule, type RedactionRule } from './redact';
 import { driverMapping, isAssociateDriver, normalizeDriver, storeFromNotes } from './drivers';
 import { classifyInsight } from './followup';
 import type { BuildResult, ParsedFile, ParseRequest, ValidationReport } from './types';
@@ -92,7 +92,7 @@ function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, 
     const dw = dateAndWeek(ctx, get(row, map, 'date'));
     if (!dw) continue;
     const ltr = parseScore(get(row, map, 'ltr'));
-    const rawComment = cellText(get(row, map, 'comment'));
+    const rawComment = cleanComment(get(row, map, 'comment'));
     if (ltr === null && !rawComment) { drop(r, 'No valid score and no comment'); continue; }
     if (ltr === null) r.noScore++;
     const storeNo = normalizeStoreNo(get(row, map, 'storeNo'));
@@ -182,10 +182,15 @@ function buildCalls(ctx: Ctx, rows: unknown[][], map: Record<string, number>): C
   return out;
 }
 
-function buildFollowups(ctx: Ctx, rows: unknown[][], map: Record<string, number>): FollowUpRecord[] {
+function buildFollowups(baseCtx: Ctx, rows: unknown[][], map: Record<string, number>): FollowUpRecord[] {
   const out: FollowUpRecord[] = [];
+  // Names this file lists (SM column) are redacted wherever they appear in comments and insights.
+  const known = knownNamesRule(rows.filter((x) => !rowIsBlank(x)).map((x) => cellText(get(x, map, 'sm'))));
+  const ctx: Ctx = known ? { ...baseCtx, rules: [...baseCtx.rules, known] } : baseCtx;
   const r = ctx.report;
   const seen = new Set<string>();
+  let fqMismatch = 0, fpMismatch = 0;
+  const fqExample: string[] = [];
   for (const row of rows) {
     if (rowIsBlank(row)) continue;
     r.rowsRead++;
@@ -193,8 +198,11 @@ function buildFollowups(ctx: Ctx, rows: unknown[][], map: Record<string, number>
     if (!dw) continue;
     const storeNo = normalizeStoreNo(get(row, map, 'storeNo'));
     const score = parseScore(get(row, map, 'score'));
-    const rawComment = cellText(get(row, map, 'comment'));
+    const rawComment = cleanComment(get(row, map, 'comment'));
     const rawInsights = cellText(get(row, map, 'insights'));
+    const fq = parseNumber(get(row, map, 'fq')), fp = parseNumber(get(row, map, 'fp'));
+    if (fq !== null && fq !== fiscalQuarter(dw.fw)) { fqMismatch++; if (fqExample.length < 1) fqExample.push(`FW${dw.fw}: file FQ ${fq}, calendar Q${fiscalQuarter(dw.fw)}`); }
+    if (fp !== null && fp !== fiscalMonth(dw.fw)) fpMismatch++;
     const id = `fu-${hashString(`${dw.date}|${storeNo}|${score}|${textKey(rawComment)}`)}`;
     if (seen.has(id)) { drop(r, 'Duplicate row'); continue; }
     seen.add(id);
@@ -212,6 +220,8 @@ function buildFollowups(ctx: Ctx, rows: unknown[][], map: Record<string, number>
     r.rowsKept++;
     out.push(rec);
   }
+  if (fqMismatch) r.warnings.push(`FQ column differs from the fiscal calendar on ${fqMismatch} row(s) (${fqExample[0]}). The calendar (quarter = ceil(FW ÷ 13)) was used.`);
+  if (fpMismatch) r.warnings.push(`FP column differs from the fiscal calendar's month on ${fpMismatch} row(s). The calendar was used.`);
   return out;
 }
 
@@ -460,6 +470,9 @@ export function parseFile(req: ParseRequest): ParsedFile {
           if (c) {
             const sub: Ctx = { ...ctx, report: newReport('followup') };
             result.followups = buildFollowups(sub, det.rows.slice(c.headerIndex + 1), c.map);
+            for (const [k, n] of Object.entries(sub.report.redactions)) report.redactions[k] = (report.redactions[k] ?? 0) + n;
+            report.redactionUncertain += sub.report.redactionUncertain;
+            report.warnings.push(`“Detractors” sheet: ${sub.report.rowsKept} SM follow-up row(s) read.`, ...sub.report.warnings.map((w) => `“Detractors” sheet: ${w}`));
           }
         }
         break;

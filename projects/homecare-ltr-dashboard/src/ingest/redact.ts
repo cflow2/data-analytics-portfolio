@@ -29,7 +29,38 @@ export const DEFAULT_REDACTION_RULES: RedactionRule[] = [
     pattern: `(\\b(?:CX|Cx|cx|[Cc]aller|[Ss]poke [Ww]ith|[Nn]ame|[Cc]ustomer [Nn]ame|[Mm]ember [Nn]ame|M(?:rs?|s|iss)\\.?)[ \\t]*[:\\-]?[ \\t]*)(${NAME})`,
     flags: 'g', token: '$1[name]', enabled: true,
   },
+  {
+    id: 'staff-cue', label: 'Name after Store Manager / SM / technician / associate',
+    pattern: `(\\b(?:Store Manager|Asst\\.? Store Manager|Assistant Store Manager|Department Manager|[Mm]anager|ASM|SM|RSM|DM|[Tt]echnician|[Tt]ech|RedVest Associate|[Aa]ssociate)[ \\t]*,?[ \\t]+)(?!Needs\\b|Assistance\\b)(${NAME})`,
+    flags: 'g', token: '$1[name]', enabled: true,
+  },
+  {
+    id: 'name-verb', label: 'First Last followed by an action (e.g. “Pat Example reviewed”)',
+    pattern: `\\b(?!(?:Store|Field|Customer|Member|Lowe|Lowe’s|Lowe's|HomeCare|The|This|Our|Regional|District|Region|Team|Leadership|Service|Support)\\b)([A-Z][a-z'’-]+(?:[ \\t]+[A-Z][a-z'’-]+){1,2})(?=[ \\t]+(?:also[ \\t]+|then[ \\t]+|personally[ \\t]+)?(?:reviewed|contacted|called|spoke|explained|apologized|apologised|confirmed|stated|met|visited|reached|left|followed|sent|emailed|discussed|believes|determined|attempted|coached|shared|noted|said)\\b)`,
+    flags: 'g', token: '[name]', enabled: true,
+  },
 ];
+
+/** Escape a literal for use in a RegExp. */
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * A per-file rule that redacts names the file itself tells us about (e.g. the SM column):
+ * full names and surnames of 4+ letters, capitalised, as whole words.
+ */
+export function knownNamesRule(names: string[]): RedactionRule | null {
+  const parts = new Set<string>();
+  for (const raw of names) {
+    const n = raw.replace(/\s+/g, ' ').trim();
+    if (!/^[A-Z][A-Za-z'’-]+(?: [A-Z][A-Za-z'’-]+)+$/.test(n)) continue;
+    parts.add(n);
+    const last = n.split(' ').pop()!;
+    if (last.length >= 4) parts.add(last);
+  }
+  if (!parts.size) return null;
+  const alt = [...parts].sort((a, b) => b.length - a.length).map(esc).join('|');
+  return { id: 'known-names', label: 'Names listed in this file (SM column)', pattern: `\\b(?:${alt})\\b`, flags: 'g', token: '[name]', enabled: true };
+}
 
 export interface RedactionResult {
   text: string;

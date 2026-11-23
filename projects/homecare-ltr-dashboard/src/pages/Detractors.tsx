@@ -18,6 +18,7 @@ import { KpiCard } from '@/components/ui/KpiCard';
 import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, PageHeader, Select, cx } from '@/components/ui/primitives';
 import { RedactedText } from '@/components/data/RedactedText';
+import { insightReason } from '@/ingest/followup';
 
 const UNTAGGED = 'untagged';
 const label = (theme: string) => (theme === UNTAGGED ? 'Untagged' : themeName(theme));
@@ -90,7 +91,7 @@ export function Detractors() {
         </div>
       ) },
     { id: 'fu', header: 'SM follow-up', value: (r) => r.followUp, width: 108,
-      cell: (r) => <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-medium', STATUS_CLS[r.followUp])}>{r.followUp}</span> },
+      cell: (r) => <span title={r.followUp === 'Missing' && !r.followUpId ? 'Survey not in the follow-up file' : insightReason(r.smInsight)} className={cx('rounded-full px-2 py-0.5 text-[11px] font-medium', STATUS_CLS[r.followUp])}>{r.followUp}</span> },
     { id: 'insight', header: 'SM insight (redacted)', value: (r) => r.smInsight, sortable: false, width: '18%',
       cell: (r) => (r.followUpId && r.smInsight ? <RedactedText recordId={r.followUpId} field="insights" text={r.smInsight} className="text-xs" /> : <span className="text-xs text-muted">—</span>) },
     { id: 'days', header: 'Days', value: (r) => r.daysSince, align: 'right', width: 56,
