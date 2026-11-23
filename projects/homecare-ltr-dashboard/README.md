@@ -6,7 +6,7 @@ A local, single-page analytics app for HomeCare+ LTR reporting, Voice of the Cus
 - Data lives in this browser's IndexedDB. Export or import a JSON backup from **Data Manager**.
 - `npm run build` produces **one self-contained HTML file** (`dist/index.html`). Double-click it to open it offline.
 
-> **Status:** phases 1–2 of 7 (Foundation, Ingestion) are complete. See [Build status](#build-status).
+> **Status:** phases 1–3 of 7 (Foundation, Ingestion, LTR core) are complete. See [Build status](#build-status).
 
 ## Setup
 
@@ -62,6 +62,15 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 - Phone numbers are hashed with a per-install salt (for repeat-caller detection) and never displayed.
 - The JSON backup contains original text — keep it on the work laptop.
 
+## Calculation notes
+
+- Multi-week figures (FYTD, 4-week average, months, quarters, rolling 4-week) **pool counts** (promoters ÷ n); they never average weekly percentages.
+- Compare-to: *prior week* = FW−1; *4-week avg* = pooled FW−4…FW−1; *FYTD* = pooled FW1…FW.
+- Colour appears only when n ≥ the “No trend” threshold (default 5). Heat cells use a blue/orange diverging scale centred on the benchmark, and every cell also says “above”/“below”.
+- Attributes use per-survey answers when loaded (so geography filters apply); otherwise the Medallia Analytics weekly values (company-wide only).
+- Charts never use two y-scales: the n panel under the LTR line has its own axis.
+- A detractor is “overdue” when there is no documented SM contact 48+ hours after the survey date.
+
 ## Demo data
 
 **Data Manager → Demo source files** downloads 12 synthetic files shaped like the real exports (header on row 3, ~300 columns, mixed sheet names, text dates, newline Case #s, day-before rows, fake PII) to try the uploader end to end. Importing them reproduces the same baselines.
@@ -74,6 +83,7 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 src/
   lib/          dates, fiscal calendar, LTR rules, seeded RNG
   domain/       types, taxonomy, attributes, geography
+  analytics/    LTR pooling, compare baselines, grains, attributes, detractors, theme mentions, headline (pure, tested)
   db/           Dexie schema, backup/restore, queries
   ingest/       file detection, parsing, redaction, validation, commit (worker + pure functions)
   demo/         demo generator and loader
@@ -88,8 +98,8 @@ src/
 |---|---|---|
 | 1 Foundation | project, shell, routing, filter bar, theme, fiscal calendar, Dexie schema, demo data | ✅ done |
 | 2 Ingestion | 7 parsers in a Web Worker, fuzzy headers, mapping dialog, redaction, validation report | ✅ done |
-| 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | next |
-| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | |
+| 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ done |
+| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | next |
 | 5 AI layer | provider settings, tagging, writing, Ask, number verification | |
 | 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | |
 | 7 Hardening | performance, accessibility, quality checklist, weekly workflow docs | |

@@ -7,6 +7,7 @@ import { useUi } from '@/state/ui';
 import { SCREENS } from '@/screens';
 import { Button, cx } from '@/components/ui/primitives';
 import { useSelectedWeek } from '@/hooks/useWeek';
+import { DatasetProvider } from '@/data/dataset';
 
 export function AppShell() {
   const presentation = useUi((s) => s.presentation);
@@ -32,6 +33,7 @@ export function AppShell() {
   }, [presentation, pathname, search, navigate, setPresentation]);
 
   return (
+    <DatasetProvider>
     <div className={cx('flex h-full', presentation && 'presentation')} data-presentation={presentation || undefined}>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-1">Skip to content</a>
       {!presentation && <LeftNav />}
@@ -53,5 +55,6 @@ export function AppShell() {
       </div>
       <CommandPalette />
     </div>
+    </DatasetProvider>
   );
 }

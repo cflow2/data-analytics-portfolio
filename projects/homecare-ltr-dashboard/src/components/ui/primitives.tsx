@@ -160,3 +160,14 @@ export function Select<T extends string>({ label, value, onChange, options, clas
 export function DemoBanner() {
   return <span className="rounded-md bg-watch px-1.5 py-px text-[11px] font-bold tracking-wider text-watch-ink">DEMO</span>;
 }
+
+export function Segmented<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string }[] }) {
+  return (
+    <div className="flex h-8 overflow-hidden rounded-lg border border-border" role="radiogroup" aria-label={label}>
+      {options.map((o) => (
+        <button key={o.value} type="button" role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)}
+          className={cx('motion px-3 text-sm', value === o.value ? 'bg-calls-soft font-medium text-calls' : 'text-muted hover:bg-surface-2')}>{o.label}</button>
+      ))}
+    </div>
+  );
+}

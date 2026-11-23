@@ -4,9 +4,16 @@ import { CommandCenter } from '@/pages/CommandCenter';
 import { DataManager } from '@/pages/DataManager';
 import { Settings } from '@/pages/Settings';
 import { Placeholder } from '@/pages/Placeholder';
+import { LtrTrends } from '@/pages/LtrTrends';
+import { RegionalDrilldown } from '@/pages/RegionalDrilldown';
+import { Detractors } from '@/pages/Detractors';
+import { Attributes } from '@/pages/Attributes';
 import { SCREENS } from '@/screens';
 
-const BUILT: Record<string, () => JSX.Element> = { '/': CommandCenter, '/data': DataManager, '/settings': Settings };
+const BUILT: Record<string, () => JSX.Element> = {
+  '/': CommandCenter, '/trends': LtrTrends, '/regions': RegionalDrilldown, '/detractors': Detractors, '/attributes': Attributes,
+  '/data': DataManager, '/settings': Settings,
+};
 
 const router = createHashRouter([
   {
