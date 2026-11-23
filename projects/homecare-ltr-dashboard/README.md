@@ -6,7 +6,7 @@ A local, single-page analytics app for HomeCare+ LTR reporting, Voice of the Cus
 - Data lives in this browser's IndexedDB. Export or import a JSON backup from **Data Manager**.
 - `npm run build` produces **one self-contained HTML file** (`dist/index.html`). Double-click it to open it offline.
 
-> **Status:** phases 1–4 of 7 (Foundation, Ingestion, LTR core, VOC & calls) are complete. See [Build status](#build-status).
+> **Status:** phases 1–5 of 7 are complete (phase 5 built without AI — see below). See [Build status](#build-status).
 
 ## Setup
 
@@ -76,6 +76,14 @@ Every survey comment and customer call is tagged on import (and on **Data Manage
 
 On the demo data the rules reproduce every baseline exactly; on a real FY26 Tracker about 8% of comments land in the Review Queue.
 
+## No AI, no network
+
+There is no AI provider: the work laptop has no API key or approved gateway, so the AI layer in the brief was replaced by local equivalents.
+
+- **Ask** turns a question into filters (weeks, region/district/store, theme, channel, thresholds) and an intent (why LTR moved, regions below benchmark, cancellations, what's new, LTR, detractors, attributes, stores, themes, calls), computes the answer from the loaded data and shows a **Data used** panel. If the data isn't loaded it says so; unrecognised questions get examples, never a guess.
+- **Writing** (slide theme lines ≤ 85 characters, the LTR callout, what-changed summary, speaker notes) is generated from one `weekFacts` object, so every number comes from the data. A **number checker** flags any figure in edited text that doesn't match (percentages must match percentages).
+- The page's content-security policy blocks all outbound connections (`connect-src 'self' data: blob:`).
+
 ## Calculation notes
 
 - Multi-week figures (FYTD, 4-week average, months, quarters, rolling 4-week) **pool counts** (promoters ÷ n); they never average weekly percentages.
@@ -98,6 +106,8 @@ src/
   lib/          dates, fiscal calendar, LTR rules, seeded RNG
   domain/       types, taxonomy, attributes, geography
   tagging/      keyword rules engine, runner, taxonomy store, manual overrides, WBR pins
+  writing/      rule-based slide lines, callout, what-changed, speaker notes; number verification
+  ask/          local question planner + answers (no AI)
   analytics/    LTR pooling, compare baselines, grains, attributes, detractors, theme mentions, headline (pure, tested)
   db/           Dexie schema, backup/restore, queries
   ingest/       file detection, parsing, redaction, validation, commit (worker + pure functions)
@@ -115,6 +125,6 @@ src/
 | 2 Ingestion | 7 parsers in a Web Worker, fuzzy headers, mapping dialog, redaction, validation report | ✅ done |
 | 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ done |
 | 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | ✅ done |
-| 5 AI layer | provider settings, tagging, writing, Ask, number verification | next |
-| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | |
+| 5 Writing & Ask (no AI) | rule-based writing, number verification, local Ask with “Data used”; outbound network blocked | ✅ done |
+| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | next |
 | 7 Hardening | performance, accessibility, quality checklist, weekly workflow docs | |

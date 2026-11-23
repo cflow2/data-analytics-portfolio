@@ -87,10 +87,8 @@ export function Settings() {
         <Card title="Redaction rules" className="col-span-2">
           <RedactionRulesEditor />
         </Card>
-        <Card title="Coming in later phases" className="col-span-2">
-          <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
-            <li>AI provider settings (phase 5)</li>
-          </ul>
+        <Card title="AI" className="col-span-2">
+          <p className="text-sm text-muted">Not used. Theme tags come from the keyword rules, Ask answers are computed locally, and slide lines, speaker notes and the daily pulse are written from the computed numbers by rules. The app makes no network requests; its content-security policy blocks outbound connections.</p>
         </Card>
       </div>
     </>

@@ -23,7 +23,7 @@ export const SCREENS: ScreenDef[] = [
   { path: '/cross', title: 'Cross-Channel', subtitle: 'Which themes show up in both surveys and calls, and what changed?', icon: 'split', needs: ['LTR_Tracker*.xlsx', '*_HC_Loyalty_Cases.xlsx'], phase: 4, group: 'Listen' },
   { path: '/wbr', title: 'WBR Builder', subtitle: 'What goes on Wednesday’s slide, and is it ready to export?', icon: 'slide', needs: ['LTR_Tracker*.xlsx', '*_HC_Loyalty_Cases.xlsx'], phase: 6, group: 'Deliver' },
   { path: '/pulse', title: 'Daily Pulse', subtitle: 'What do I say in 60 seconds at this morning’s meeting?', icon: 'pulse', needs: ['*_HC_Loyalty_Cases.xlsx', 'LTR_Tracker*.xlsx'], phase: 6, group: 'Deliver' },
-  { path: '/ask', title: 'Ask', subtitle: 'Ask a question about the loaded data.', icon: 'ask', needs: ['Any loaded week'], phase: 5, group: 'Deliver' },
+  { path: '/ask', title: 'Ask', subtitle: 'What does the loaded data say about…? (answered locally, never guessed)', icon: 'ask', needs: ['Any loaded week'], phase: 5, group: 'Deliver' },
   { path: '/review', title: 'Review Queue', subtitle: 'Which tags need a human decision?', icon: 'review', needs: ['Tagged survey or call records'], phase: 4, group: 'Manage' },
   { path: '/data', title: 'Data Manager', subtitle: 'What is loaded, is it clean, and which weeks does it cover?', icon: 'database', needs: [], phase: 2, group: 'Manage' },
   { path: '/settings', title: 'Settings', subtitle: 'Business rules, taxonomy, AI and appearance.', icon: 'settings', needs: [], phase: 1, group: 'Manage' },

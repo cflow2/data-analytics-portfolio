@@ -6,6 +6,9 @@ import { themeMentions } from '@/analytics/voc';
 import { firstSeen, maturity, maturityRank, themeHistory, weekOfTheme, weeksSeen, whatChanged } from '@/analytics/themes';
 import type { Signal, Status } from '@/domain/types';
 import { useUi } from '@/state/ui';
+import { useSettings } from '@/state/settings';
+import { weekFacts } from '@/analytics/facts';
+import { whatChangedSummary } from '@/writing/write';
 import { Butterfly, type ButterflySort } from '@/components/charts/Butterfly';
 import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, Delta, MaturityBadge, PageHeader, Segmented, StatusPill, cx } from '@/components/ui/primitives';
@@ -26,6 +29,7 @@ export function CrossChannel() {
   const { data, loading, error } = useWeekData();
   const presentation = useUi((x) => x.presentation);
   const [sort, setSort] = useState<ButterflySort>('mentions');
+  const thresholds = useSettings((x) => x.thresholds);
 
   const v = useMemo(() => {
     if (!data) return null;
@@ -35,8 +39,9 @@ export function CrossChannel() {
     const h = themeHistory(ds.tagList, custIds);
     const validated = new Set(ds.signals.filter((x) => x.validated).map((x) => x.theme));
     const changes = whatChanged(h, fw, (th) => validated.has(th));
-    return { fw, h, mentions: themeMentions(ds.tagList, fw, custIds), changes, validated };
-  }, [data]);
+    const summary = whatChangedSummary(weekFacts(ds, fw, data.benchmark, thresholds, data.geo), ds.taxonomy);
+    return { fw, h, mentions: themeMentions(ds.tagList, fw, custIds), changes, validated, summary };
+  }, [data, thresholds]);
 
   if (!data || !v) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading} error={error} empty={false}>{null}</PageGate></>;
   const { ds } = data;
@@ -63,6 +68,7 @@ export function CrossChannel() {
           <p className="-mt-1 text-xs text-muted">Counts are records (a record counts once per theme, as primary or secondary). Survey and call counts are never combined into a rate. One call can carry several themes.</p>
 
           <Card title={`What changed · FW${v.fw}`}>
+            <p className="mb-3 text-sm">{v.summary}</p>
             <div className="grid grid-cols-4 gap-3 text-sm">
               {([['Rose vs FW' + (v.fw - 1), rose], ['Fell vs FW' + (v.fw - 1), fell]] as const).map(([title, list]) => (
                 <div key={title}>
