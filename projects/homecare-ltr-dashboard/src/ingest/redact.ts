@@ -12,6 +12,8 @@ export interface RedactionRule {
   enabled: boolean;
 }
 
+import { FIRST_NAMES } from './firstNames';
+
 const NAME = "[A-Z][A-Za-z'’-]+(?:[ \\t]+[A-Z][A-Za-z'’-]+){0,2}";
 const STREET_SUFFIX = 'St|Street|Ave|Avenue|Rd|Road|Dr|Drive|Ln|Lane|Blvd|Boulevard|Ct|Court|Way|Pl|Place|Cir|Circle|Pkwy|Parkway|Hwy|Highway|Ter|Terrace|Trl|Trail|Loop|Run|Pike';
 
@@ -33,6 +35,11 @@ export const DEFAULT_REDACTION_RULES: RedactionRule[] = [
     id: 'staff-cue', label: 'Name after Store Manager / SM / technician / associate',
     pattern: `(\\b(?:Store Manager|Asst\\.? Store Manager|Assistant Store Manager|Department Manager|[Mm]anager|ASM|SM|RSM|DM|[Tt]echnician|[Tt]ech|RedVest Associate|[Aa]ssociate)[ \\t]*,?[ \\t]+)(?!Needs\\b|Assistance\\b)(${NAME})`,
     flags: 'g', token: '$1[name]', enabled: true,
+  },
+  {
+    id: 'first-name', label: 'Common first names (+ a following surname)',
+    pattern: `\\b(?:${FIRST_NAMES.join('|')})\\b(?:[ \\t]+(?!(?:Store|Lowe|Lowe's|Lowe’s|Lowes|The|And|Manager|Team|Associate|HomeCare|Was|Is|Did|Came|Went|From|With)\\b)[A-Z][a-z'’-]+)?`,
+    flags: 'g', token: '[name]', enabled: true,
   },
   {
     id: 'name-verb', label: 'First Last followed by an action (e.g. “Pat Example reviewed”)',
@@ -84,6 +91,8 @@ const UNCERTAIN = [
   new RegExp(`\\b(?:cx|caller|spoke with|name)[ \\t]*:?[ \\t]+(?!\\[|(?:${NOT_A_NAME})\\b)[a-z]{2,}\\b`, 'i'),
   /\d{7,}/,
   /@\w/,
+  // An unredacted capitalised word right after with/by/tech/associate that isn't a brand, weekday or place word.
+  /\b(?:with|by|tech|technician|associate)\s+(?!\[)(?!(?:Lowe|Lowes|Lowe's|Lowe’s|HomeCare|Home|Depot|Field|Customer|Member|Store|Service|Services|Support|Plumbing|North|South|East|West|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun|January|February|March|April|May|June|July|August|September|October|November|December|Frigidaire|Whirlpool|Samsung|LG|GE|Kenmore|Maytag|Bosch|Rheem|Carrier|Trane|Lennox|Goodman|Ring|Google|Amazon|The|My|Our|Their|His|Her|Your|This|That|These|Those|Appointment|HVAC|AC|CO|RedVest|MyLowe|Rewards|Corporate|Management|Emailed|Called|I)\b)[A-Z][a-z]{2,}\b/,
 ];
 
 export function redact(input: string, rules: RedactionRule[] = DEFAULT_REDACTION_RULES): RedactionResult {

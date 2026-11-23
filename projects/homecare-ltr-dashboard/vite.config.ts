@@ -17,5 +17,7 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // src/__local__ holds ad-hoc checks against private files; run explicitly with TRACKER=… npx vitest run src/__local__
+    exclude: process.env.TRACKER ? [] : ['src/__local__/**', 'node_modules/**'],
   },
 });

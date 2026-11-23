@@ -4,7 +4,7 @@
  */
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
-import { fiscalMonth, fiscalQuarter, fiscalWeek, fiscalWeekInYear } from '@/lib/fiscal';
+import { fiscalMonth, fiscalQuarter, fiscalWeek, fiscalWeekInYear, weekEnd, weekStart } from '@/lib/fiscal';
 import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
@@ -15,7 +15,7 @@ import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates'
 import {
   cellText, cleanCaseNo, cleanComment, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
-import { ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
+import { ATTR_FIELDS, ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
 import { redact, extractPhones, knownNamesRule, type RedactionRule } from './redact';
 import { driverMapping, isAssociateDriver, normalizeDriver, storeFromNotes } from './drivers';
 import { classifyInsight } from './followup';
@@ -23,22 +23,69 @@ import type { BuildResult, ParsedFile, ParseRequest, ValidationReport } from './
 
 export interface Sheet { name: string; rows: unknown[][] }
 
-export function readSheets(name: string, buffer: ArrayBuffer): Sheet[] {
+/** A workbook read once; rows are converted lazily (head rows for detection, full rows only for sheets we use). */
+export interface Book { names: string[]; head: (name: string, n: number) => unknown[][]; rows: (name: string) => unknown[][] }
+
+export function openBook(name: string, buffer: ArrayBuffer): Book {
   if (/\.(csv|txt)$/i.test(name)) {
     const text = new TextDecoder('utf-8').decode(buffer).replace(/^\uFEFF/, '');
-    const res = Papa.parse<unknown[]>(text, { skipEmptyLines: false });
-    return [{ name: 'CSV', rows: res.data as unknown[][] }];
+    const rows = Papa.parse<unknown[]>(text, { skipEmptyLines: false }).data as unknown[][];
+    return { names: ['CSV'], head: (_n, k) => rows.slice(0, k), rows: () => rows };
   }
   const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', dense: true, cellDates: false, cellHTML: false, cellFormula: false, cellStyles: false });
-  return wb.SheetNames.map((sn) => ({
-    name: sn,
-    rows: XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[sn], { header: 1, raw: true, defval: null, blankrows: true }),
-  }));
+  const cache = new Map<string, unknown[][]>();
+  const conv = (sn: string, range?: number) => {
+    const ws = wb.Sheets[sn];
+    if (!ws || !ws['!ref']) return [];
+    const opts: XLSX.Sheet2JSONOpts = { header: 1, raw: true, defval: null, blankrows: true };
+    if (range !== undefined) {
+      const r = XLSX.utils.decode_range(ws['!ref']);
+      r.e.r = Math.min(r.e.r, r.s.r + range - 1);
+      r.e.c = Math.min(r.e.c, r.s.c + 400); // header detection never needs more than 400 columns
+      opts.range = r;
+    }
+    return XLSX.utils.sheet_to_json<unknown[]>(ws, opts);
+  };
+  return {
+    names: wb.SheetNames.filter((sn) => wb.Sheets[sn]),
+    head: (sn, n) => cache.get(sn)?.slice(0, n) ?? conv(sn, n),
+    rows: (sn) => { if (!cache.has(sn)) cache.set(sn, conv(sn)); return cache.get(sn)!; },
+  };
+}
+
+/** All sheets, fully converted (used by tests and small files). */
+export function readSheets(name: string, buffer: ArrayBuffer): Sheet[] {
+  const book = openBook(name, buffer);
+  return book.names.map((n) => ({ name: n, rows: book.rows(n) }));
 }
 
 // ───────────────────────── helpers ─────────────────────────
 function newReport(kind: ValidationReport['kind']): ValidationReport {
-  return { kind, rowsRead: 0, rowsKept: 0, dropped: {}, weeks: {}, redactions: {}, redactionUncertain: 0, warnings: [] };
+  return { kind, rowsRead: 0, rowsKept: 0, dropped: {}, weeks: {}, redactions: {}, redactionUncertain: 0, warnings: [], info: [] };
+}
+
+/** Compare the Tracker's own "Fiscal Calendar" sheet (WE-Date | FY | FQ | FM | FW) with the app's calendar. */
+export function checkFiscalCalendar(rows: unknown[][], fyStart: ISODate): { checked: number; mismatches: string[] } | null {
+  const hi = rows.findIndex((r) => r && r.some((c) => normalizeHeader(c) === 'fw') && r.some((c) => normalizeHeader(c) === 'fq'));
+  if (hi < 0) return null;
+  const h = rows[hi].map(normalizeHeader);
+  const col = (n: string) => h.indexOf(n);
+  const iD = h.findIndex((x) => /date/.test(x)), iY = col('fy'), iQ = col('fq'), iM = col('fm'), iW = col('fw');
+  if (iD < 0 || iW < 0) return null;
+  const body = rows.slice(hi + 1).filter((r) => r && !isBlank(r[iW]));
+  const fw1 = body.find((r) => parseNumber(r[iW]) === 1 && parseDateCell(r[iD]) === fyStart);
+  const fy = fw1 && iY >= 0 ? cellText(fw1[iY]) : null;
+  const target = body.filter((r) => (fy !== null ? cellText(r[iY]) === fy : true));
+  const mismatches: string[] = [];
+  for (const r of target) {
+    const fw = parseNumber(r[iW]);
+    if (!fw || fw < 1 || fw > 52) continue;
+    const d = parseDateCell(r[iD]);
+    if (d && d !== weekStart(fw, fyStart) && d !== weekEnd(fw, fyStart)) mismatches.push(`FW${fw}: sheet date ${d}, app ${weekStart(fw, fyStart)}`);
+    if (iQ >= 0 && parseNumber(r[iQ]) !== fiscalQuarter(fw)) mismatches.push(`FW${fw}: sheet FQ ${cellText(r[iQ])}, app Q${fiscalQuarter(fw)}`);
+    if (iM >= 0 && parseNumber(r[iM]) !== fiscalMonth(fw)) mismatches.push(`FW${fw}: sheet FM ${cellText(r[iM])}, app M${fiscalMonth(fw)}`);
+  }
+  return fy === null && !target.length ? null : { checked: target.length, mismatches };
 }
 const drop = (r: ValidationReport, reason: string) => { r.dropped[reason] = (r.dropped[reason] ?? 0) + 1; };
 function trackDate(r: ValidationReport, d: ISODate, fw: number) {
@@ -47,7 +94,11 @@ function trackDate(r: ValidationReport, d: ISODate, fw: number) {
   else { if (d < r.dateRange[0]) r.dateRange[0] = d; if (d > r.dateRange[1]) r.dateRange[1] = d; }
 }
 
+interface StoreInfo { name: string; city: string; state: string; region: string }
+
 interface Ctx {
+  /** Store name/city/state seen in the Tracker's "Store" column. */
+  storeInfo?: Map<string, StoreInfo>;
   fileName: string;
   fyStart: ISODate;
   rules: RedactionRule[];
@@ -66,6 +117,17 @@ function doRedact(ctx: Ctx, recordId: string, field: OriginalText['field'], raw:
 }
 
 const rowIsBlank = (row: unknown[] | undefined) => !row || row.every(isBlank);
+/** Rows where only formula/helper columns are filled (e.g. FW/FQ/FP dragged down) are not data. */
+const noContent = (row: unknown[], map: Record<string, number>, keys: string[]) => keys.every((k) => !(k in map) || isBlank(row[map[k]]));
+
+/** "2968 - LOWE'S OF CARROLLTON, GA" → Carrollton, GA */
+export function parseStoreName(raw: string): { name: string; city: string; state: string } {
+  const name = raw.replace(/^\s*\d+\s*-\s*/, '').trim();
+  const rest = name.replace(/^LOWE['’]?S\s+(OF\s+)?/i, '').trim();
+  const m = /^(.*?),\s*([A-Za-z]{2})\.?\s*$/.exec(rest);
+  const title = (x: string) => x.toLowerCase().replace(/(^|[\s.\-/])([a-z])/g, (_, a, b) => a + b.toUpperCase()).trim();
+  return m ? { name, city: title(m[1]), state: m[2].toUpperCase() } : { name, city: title(rest.replace(/,$/, '')), state: '' };
+}
 const get = (row: unknown[], map: Record<string, number>, key: string): unknown => (key in map ? row[map[key]] : undefined);
 
 /** Shared date → fiscal-week step; returns null (and records why) when the row must be dropped. */
@@ -87,7 +149,7 @@ function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, 
   r.fwMismatches = 0;
   r.noScore = 0;
   for (const row of rows) {
-    if (rowIsBlank(row)) continue;
+    if (rowIsBlank(row) || noContent(row, map, ['surveyId', 'ltr', 'comment'])) continue;
     r.rowsRead++;
     const dw = dateAndWeek(ctx, get(row, map, 'date'));
     if (!dw) continue;
@@ -112,6 +174,10 @@ function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, 
       id, source, fw: dw.fw, date: dw.date, storeNo, region: normalizeRegion(get(row, map, 'region')),
       ltr, comment: text, sourceFile: ctx.fileName,
     };
+    if (ctx.storeInfo && 'storeName' in map && !ctx.storeInfo.has(storeNo)) {
+      const sn = cellText(get(row, map, 'storeName'));
+      if (sn) ctx.storeInfo.set(storeNo, { ...parseStoreName(sn), region: rec.region });
+    }
     const market = cellText(get(row, map, 'market'));
     if (market) rec.market = market;
     const appt = cellText(get(row, map, 'appointmentId'));
@@ -147,7 +213,7 @@ function buildCalls(ctx: Ctx, rows: unknown[][], map: Record<string, number>): C
   const drivers: string[] = [];
   let duplicateRows = 0;
   for (const row of rows) {
-    if (rowIsBlank(row)) continue;
+    if (rowIsBlank(row) || noContent(row, map, ['caseNo', 'notes', 'driver'])) continue;
     r.rowsRead++;
     const dw = dateAndWeek(ctx, get(row, map, 'date'));
     if (!dw) continue;
@@ -192,7 +258,7 @@ function buildFollowups(baseCtx: Ctx, rows: unknown[][], map: Record<string, num
   let fqMismatch = 0, fpMismatch = 0;
   const fqExample: string[] = [];
   for (const row of rows) {
-    if (rowIsBlank(row)) continue;
+    if (rowIsBlank(row) || noContent(row, map, ['score', 'storeNo', 'insights', 'comment'])) continue;
     r.rowsRead++;
     const dw = dateAndWeek(ctx, get(row, map, 'date'));
     if (!dw) continue;
@@ -245,8 +311,7 @@ function buildStores(ctx: Ctx, rows: unknown[][], map: Record<string, number>, c
 
 function attributeKeyFor(label: string): AttributeKey | null {
   const n = normalizeHeader(label);
-  for (const f of SPEC_BY_KIND.tracker.fields) {
-    if (!(ATTR_FIELD_KEYS as string[]).includes(f.key)) continue;
+  for (const f of ATTR_FIELDS) {
     if (f.aliases.includes(n) || f.contains?.some((g) => g.every((t) => n.includes(t)))) return f.key as AttributeKey;
   }
   const exact = ATTRIBUTES.find((a) => normalizeHeader(a.label) === n);
@@ -419,8 +484,10 @@ export function parseFile(req: ParseRequest): ParsedFile {
   const t0 = performance.now();
   const base: ParsedFile = { fileId: req.fileId, name: req.name, size: req.buffer.byteLength, sheets: [], candidate: null, headers: [], ms: 0 };
   try {
-    const sheets = readSheets(req.name, req.buffer);
-    base.sheets = sheets.map((s) => s.name);
+    // Read once; detect from the top rows of each sheet; fully convert only the sheets we use.
+    const book = openBook(req.name, req.buffer);
+    const sheets: Sheet[] = book.names.map((n) => ({ name: n, rows: book.head(n, 60) }));
+    base.sheets = book.names;
     let cand: Candidate | null = null;
     if (req.force) {
       const sheet = sheets.find((s) => s.name === req.force!.sheet) ?? sheets[0];
@@ -443,10 +510,15 @@ export function parseFile(req: ParseRequest): ParsedFile {
       }
     }
     if (!cand) return { ...base, error: 'Could not recognise this file. None of the sheets has the expected columns.', ms: performance.now() - t0 };
-    const sheet = sheets.find((s) => s.name === cand!.sheet)!;
     base.candidate = cand;
-    base.headers = (sheet.rows[cand.headerIndex] ?? []).map(cellText);
+    base.headers = (sheets.find((s) => s.name === cand!.sheet)!.rows[cand.headerIndex] ?? []).map(cellText);
     if (cand.missing.length) return { ...base, ms: performance.now() - t0 };
+
+    // A Tracker carries large irrelevant hidden sheets: convert only the ones we use.
+    const TRACKER_EXTRA = /servicing selling stores|region divi|^detractors$|fiscal calendar/i;
+    const wanted = [cand.sheet, ...(cand.kind === 'tracker' ? base.sheets.filter((n) => n !== cand!.sheet && TRACKER_EXTRA.test(n.trim())) : [])];
+    const full: Sheet[] = wanted.map((n) => ({ name: n, rows: book.rows(n) }));
+    const sheet = full.find((s) => s.name === cand!.sheet)!;
 
     const report = newReport(cand.kind);
     const ctx: Ctx = { fileName: req.name, fyStart: req.fyStart, rules: req.rules, salt: req.salt, originals: [], report };
@@ -454,17 +526,31 @@ export function parseFile(req: ParseRequest): ParsedFile {
     const result: BuildResult = { kind: cand.kind, surveys: [], calls: [], followups: [], stores: [], attributeWeekly: [], originals: ctx.originals, report };
     switch (cand.kind) {
       case 'tracker': {
+        ctx.storeInfo = new Map();
         result.surveys = buildSurveys(ctx, body, cand.map, 'tracker');
         // Store→district from the Tracker's own sheets, when they carry it.
-        for (const s of sheets) {
+        for (const s of full) {
           if (!/servicing selling stores|region divi/i.test(s.name)) continue;
           const c = detectCandidates('', [s], req.remembered).find((x) => x.kind === 'store-map' && x.missing.length === 0);
           if (c) result.stores.push(...buildStores(ctx, s.rows.slice(c.headerIndex + 1), c.map, false));
         }
         report.storesFromSheets = result.stores.length;
-        if (!result.stores.length) report.warnings.push('No store→district mapping found in the Tracker’s “Servicing Selling Stores” / “Region Divison” sheets. Upload a mapping CSV.');
+        // Add name/city/state from the Export Data "Store" column; stores missing from the mapping stay unmapped.
+        const byNo = new Map(result.stores.map((x) => [x.storeNo, x]));
+        for (const [no, info] of ctx.storeInfo) {
+          const st = byNo.get(no);
+          if (st) Object.assign(st, { name: info.name, city: info.city, state: info.state, region: st.region || info.region });
+          else result.stores.push({ storeNo: no, name: info.name, city: info.city, state: info.state, district: null, region: info.region });
+        }
+        const cal = full.find((x) => /^fiscal calendar$/i.test(x.name.trim()));
+        const calCheck = cal ? checkFiscalCalendar(cal.rows, req.fyStart) : null;
+        if (calCheck) {
+          if (calCheck.mismatches.length) report.warnings.push(`“Fiscal Calendar” sheet disagrees with the app on ${calCheck.mismatches.length} item(s): ${calCheck.mismatches.slice(0, 4).join('; ')}.`);
+          else report.info!.push(`“Fiscal Calendar” sheet matches the app’s calendar for all ${calCheck.checked} weeks of this fiscal year (dates, FQ, FM).`);
+        }
+        if (!report.storesFromSheets) report.warnings.push('No store→district mapping found in the Tracker’s “Servicing Selling Stores” / “Region Divison” sheets. Upload a mapping CSV.');
         // SM follow-up notes on the Tracker's "Detractors" sheet
-        const det = sheets.find((s) => /^detractors$/i.test(s.name.trim()));
+        const det = full.find((s) => /^detractors$/i.test(s.name.trim()));
         if (det) {
           const c = detectCandidates('', [det], req.remembered).find((x) => x.kind === 'followup' && x.missing.length === 0);
           if (c) {
@@ -472,7 +558,10 @@ export function parseFile(req: ParseRequest): ParsedFile {
             result.followups = buildFollowups(sub, det.rows.slice(c.headerIndex + 1), c.map);
             for (const [k, n] of Object.entries(sub.report.redactions)) report.redactions[k] = (report.redactions[k] ?? 0) + n;
             report.redactionUncertain += sub.report.redactionUncertain;
-            report.warnings.push(`“Detractors” sheet: ${sub.report.rowsKept} SM follow-up row(s) read.`, ...sub.report.warnings.map((w) => `“Detractors” sheet: ${w}`));
+            report.info!.push(`“Detractors” sheet: ${sub.report.rowsKept} SM follow-up row(s) read.`);
+            const subDrops = Object.entries(sub.report.dropped);
+            if (subDrops.length) report.warnings.push(`“Detractors” sheet: dropped ${subDrops.map(([k, n]) => `${n} (${k.toLowerCase()})`).join(', ')}.`);
+            report.warnings.push(...sub.report.warnings.map((w) => `“Detractors” sheet: ${w}`));
           }
         }
         break;

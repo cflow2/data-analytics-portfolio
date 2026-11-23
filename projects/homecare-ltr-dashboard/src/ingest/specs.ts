@@ -19,11 +19,11 @@ export interface KindSpec {
   sheetHint?: RegExp;
 }
 
-const ATTR_FIELDS: (FieldSpec & { key: AttributeKey })[] = [
+export const ATTR_FIELDS: (FieldSpec & { key: AttributeKey })[] = [
   { key: 'value', label: 'Value for money', required: false, aliases: ['value for money', 'project value'], contains: [['value', 'money']] },
   { key: 'scheduling', label: 'Ease of scheduling', required: false, aliases: ['ease of scheduling'], contains: [['ease', 'schedul']] },
   { key: 'quality', label: 'Quality of services', required: false, aliases: ['quality of services', 'quality of service', 'project quality'], contains: [['quality', 'service']] },
-  { key: 'timeToAppt', label: 'Time to get an appointment', required: false, aliases: ['time to get an appointment', 'amount of time it took to complete your project'], contains: [['time to', 'appointment'], ['amount of time']] },
+  { key: 'timeToAppt', label: 'Time to get an appointment', required: false, aliases: ['time to get an appointment', 'amount of time it took to complete your project'], contains: [['time to get'], ['amount of time', 'complete']] },
   { key: 'processPrior', label: 'Ease of process prior to the appointment', required: false, aliases: ['ease of process prior to the appointment', 'ease of process'], contains: [['prior', 'appointment']] },
   { key: 'overall', label: 'Overall subscription', required: false, aliases: ['overall subscription', 'the overall homecare+ subscription'], contains: [['overall', 'subscription']] },
   { key: 'craftsmanship', label: 'Associate craftsmanship', required: false, aliases: ['associate craftsmanship', 'craftsmanship'], contains: [['craftsmanship']] },
@@ -42,13 +42,13 @@ export const SPECS: KindSpec[] = [
       { key: 'region', label: "Lowe's Region", required: true, aliases: ["lowe's region", 'region'] },
       { key: 'market', label: "Lowe's Market", required: false, aliases: ["lowe's market", 'market'] },
       { key: 'storeNo', label: 'Store #', required: true, aliases: ['store #', 'store number', 'store no', 'store'] },
+      { key: 'storeName', label: 'Store (e.g. “2968 - LOWE’S OF CARROLLTON, GA”)', required: false, aliases: ['store', 'store name', 'storename'] },
       { key: 'date', label: 'Date Only', required: true, aliases: ['date only', 'response date', 'survey date', 'date'] },
       { key: 'appointmentId', label: 'Appointment ID', required: false, aliases: ['appointment id', 'appointmentid'] },
       { key: 'ltr', label: 'Likelihood to Recommend', required: true, aliases: ['likelihood to recommend'], contains: [['likelihood', 'recommend']] },
       { key: 'score100', label: 'Score (100/0)', required: false, aliases: ['score'] },
       { key: 'fw', label: 'FW #', required: false, aliases: ['fw #', 'fw', 'fiscal week'] },
       { key: 'comment', label: 'HomeCare+ comment', required: false, aliases: [COMMENT_HC], contains: [['additional feedback', 'homecare']] },
-      ...ATTR_FIELDS,
     ],
   },
   {

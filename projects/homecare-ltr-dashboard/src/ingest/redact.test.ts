@@ -64,4 +64,16 @@ describe('redaction', () => {
     const rules = [...DEFAULT_REDACTION_RULES, rule];
     expect(redact('Per Example, the member was happy. Sam Sample will follow up.', rules).text).toBe('Per [name], the member was happy. [name] will follow up.');
   });
+
+  it('common first names in comments, with an optional surname', () => {
+    expect(r('Ryan was great and very professional.')).toBe('[name] was great and very professional.');
+    expect(r('I spoke to Janet Smith at the store.')).toBe('I spoke to [name] at the store.');
+    expect(r('Thank you Tom!')).toBe('Thank you [name]!');
+    expect(r('Called Lowe’s Store on Monday. Will call back in May.')).toBe('Called Lowe’s Store on Monday. Will call back in May.');
+    expect(r('Mark the calendar; the jack was left behind.')).toBe('Mark the calendar; the jack was left behind.');
+  });
+  it('flags unusual names after with/by for review', () => {
+    expect(redact('Had a great visit with Lyraneese today').uncertain).toBe(true);
+    expect(redact('Scheduled with Lowe’s for Sunday').uncertain).toBe(false);
+  });
 });

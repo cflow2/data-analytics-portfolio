@@ -37,6 +37,8 @@ export interface ValidationReport {
   merged?: number;
   lockedWeekRows?: number;
   warnings: string[];
+  /** Checks that passed (shown without a warning flag). */
+  info?: string[];
 }
 
 export interface FollowUpCheck {

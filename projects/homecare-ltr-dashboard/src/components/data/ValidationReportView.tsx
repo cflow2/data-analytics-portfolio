@@ -13,14 +13,21 @@ function Row({ label, children, flag }: { label: string; children: React.ReactNo
   );
 }
 
-const REDACTION_LABEL: Record<string, string> = { email: 'emails', order: 'order #s', phone: 'phones', address: 'addresses', 'name-cue': 'names' };
+const REDACTION_LABEL: Record<string, string> = {
+  email: 'emails', order: 'order #s', phone: 'phones', address: 'addresses',
+  'name-cue': 'names', 'staff-cue': 'names', 'first-name': 'names', 'name-verb': 'names', 'known-names': 'names',
+};
 
 export function ValidationReportView({ report, selectedWeek }: { report: ValidationReport; selectedWeek?: number }) {
   const fyStart = useSettings((s) => s.fyStart);
   const dropped = Object.entries(report.dropped);
   const totalDropped = dropped.reduce((a, [, n]) => a + n, 0);
   const weeks = Object.entries(report.weeks).map(([w, n]) => [Number(w), n] as const).sort((a, b) => a[0] - b[0]);
-  const redactions = Object.entries(report.redactions);
+  const redactions = Object.entries(Object.entries(report.redactions).reduce<Record<string, number>>((a, [k, n]) => {
+    const label = REDACTION_LABEL[k] ?? k;
+    a[label] = (a[label] ?? 0) + n;
+    return a;
+  }, {}));
   const sel = report.targetWeek ?? selectedWeek;
   return (
     <dl className="mt-2">
@@ -33,7 +40,7 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
       {report.dateRange && (
         <Row label="Dates found" flag={!!sel && weeks.some(([w]) => w !== sel) && report.kind === 'loyalty-cases'}>
           {rangeLabel(report.dateRange[0], report.dateRange[1])}, {report.dateRange[0].slice(0, 4)}
-          {sel ? <> · selected week {weekInfo(sel, fyStart).label.split(' · ').slice(0, 2).join(' · ')}</> : null}
+          {sel && report.kind === 'loyalty-cases' ? <> · importing into {weekInfo(sel, fyStart).label.split(' · ').slice(0, 2).join(' · ')}</> : null}
         </Row>
       )}
       {weeks.length > 0 && (
@@ -68,7 +75,7 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
       {!!report.noScore && <Row label="No valid score">{report.noScore} row(s) kept for their comment only (not in LTR)</Row>}
       {report.followupCheck?.map((c) => (
         <Row key={c.fw} label={`FW${c.fw} follow-up check`} flag={c.missing.length > 0}>
-          Tracker non-promoters: {c.trackerNonPromoters} · in follow-up file: {c.inFile} · documented {c.documented} · email only {c.emailOnly}
+          Tracker non-promoters: {c.trackerNonPromoters} · follow-up rows for FW{c.fw}: {c.inFile} · documented {c.documented} · email only {c.emailOnly}
           {c.missing.length > 0 && (
             <ul className="mt-1 text-xs">
               <li className="text-muted">Missing from the follow-up file:</li>
@@ -93,9 +100,10 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
         </Row>
       )}
       <Row label="Redaction">
-        {redactions.length ? redactions.map(([k, n]) => `${n} ${REDACTION_LABEL[k] ?? k}`).join(' · ') : 'No PII found'}
+        {redactions.length ? redactions.map(([k, n]) => `${n} ${k}`).join(' · ') : 'No PII found'}
         {report.redactionUncertain > 0 && <span className="text-surveys"> · {report.redactionUncertain} uncertain (sent to Review Queue)</span>}
       </Row>
+      {report.info?.map((w) => <Row key={w} label="Check">✓ {w}</Row>)}
       {report.warnings.map((w) => <Row key={w} label="Note" flag>{w}</Row>)}
     </dl>
   );
