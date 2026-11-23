@@ -17,8 +17,12 @@ export type AttributeKey =
   | 'overall' | 'craftsmanship' | 'professionalism' | 'knowledge';
 
 /** A survey response (LTR Tracker / Medallia). Text fields are redacted; originals live in `originals`. */
+export type SurveySource = 'tracker' | 'medallia' | 'commentary' | 'demo';
+
 export interface SurveyRecord {
   id: string;
+  /** Only Tracker (and demo) records count toward LTR; the Tracker is the source of truth. */
+  source?: SurveySource;
   fw: number;
   date: ISODate;
   storeNo: string;
@@ -31,6 +35,7 @@ export interface SurveyRecord {
   comment: string;
   attrs?: Partial<Record<AttributeKey, number>>;
   sourceFile: string;
+  redactionUncertain?: boolean;
   demo?: boolean;
 }
 
@@ -47,6 +52,7 @@ export interface CallRecord {
   /** salted hash of a phone number found in the notes, never displayed */
   phoneHash?: string;
   sourceFile: string;
+  redactionUncertain?: boolean;
   demo?: boolean;
 }
 
@@ -63,6 +69,7 @@ export interface FollowUpRecord {
   region: string;
   status: FollowUpStatus;
   sourceFile: string;
+  redactionUncertain?: boolean;
   demo?: boolean;
 }
 
@@ -120,6 +127,7 @@ export interface ImportedFile {
   kept: number;
   weeks: number[];
   dateRange?: [ISODate, ISODate];
+  /** ValidationReport (see src/ingest/types.ts) */
   report?: unknown;
 }
 

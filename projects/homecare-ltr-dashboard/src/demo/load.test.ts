@@ -9,6 +9,10 @@ describe('demo load / backup round-trip', () => {
     const first = await loadDemoData(db);
     await loadDemoData(db);
     expect(await db.surveys.count()).toBe(first.surveys);
+    // demo notes carry synthetic PII; stored text is redacted, originals kept separately
+    const notes = (await db.calls.toArray()).map((c) => c.notes).join('\n');
+    expect(notes).not.toMatch(/\(555\)|@example\.com/);
+    expect(await db.originals.count()).toBeGreaterThan(0);
     expect(await db.calls.count()).toBe(first.calls);
 
     const backup = await exportBackup(db);
@@ -21,6 +25,7 @@ describe('demo load / backup round-trip', () => {
     await removeDemoData(db);
     expect(await db.surveys.count()).toBe(0);
     expect(await db.calls.count()).toBe(0);
+    expect(await db.originals.count()).toBe(0);
     await expect(importBackup({ nope: 1 }, db)).rejects.toThrow();
   });
 });

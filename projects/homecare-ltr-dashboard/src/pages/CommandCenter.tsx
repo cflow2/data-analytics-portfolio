@@ -5,6 +5,7 @@ import { useSelectedWeek } from '@/hooks/useWeek';
 import { useFilters } from '@/state/filters';
 import { useSettings } from '@/state/settings';
 import { ltrSummary } from '@/lib/ltr';
+import { countsForLtr } from '@/domain/survey';
 import { Card, EmptyState, ErrorState, PageHeader, PctN, Skeleton, Delta } from '@/components/ui/primitives';
 import { SCREENS } from '@/screens';
 import { monthDay } from '@/lib/dates';
@@ -20,7 +21,7 @@ export function CommandCenter() {
   const benchmark = useSettings((x) => x.benchmark);
   const { search } = useLocation();
   const q = useLive(async () => {
-    const match = (r: { region: string; storeNo: string }) => (!f.region || r.region === f.region) && (!f.store || r.storeNo === f.store);
+    const match = (r: { region: string; storeNo: string; source?: import('@/domain/types').SurveySource }) => countsForLtr(r) && (!f.region || r.region === f.region) && (!f.store || r.storeNo === f.store);
     const surveys = (await db.surveys.where('fw').equals(week.fw).toArray()).filter(match);
     const prior = (await db.surveys.where('fw').equals(week.fw - 1).toArray()).filter(match);
     const fytd = (await db.surveys.where('fw').between(1, week.fw, true, true).toArray()).filter(match);

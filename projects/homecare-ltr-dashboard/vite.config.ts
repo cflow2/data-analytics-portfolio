@@ -9,7 +9,8 @@ export default defineConfig({
   base: './',
   plugins: [react(), tailwindcss(), viteSingleFile({ removeViteModuleLoader: true })],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  worker: { format: 'es' },
+  // Classic (IIFE) worker: module workers from blob: URLs don't load when the page is opened via file://.
+  worker: { format: 'iife' },
   build: { assetsInlineLimit: 100_000_000, cssCodeSplit: false, chunkSizeWarningLimit: 10_000 },
   test: {
     globals: true,

@@ -1,10 +1,11 @@
 import { db } from './db';
 
-/** Fiscal weeks that have any survey or call data, ascending. */
-export async function weeksWithData(): Promise<number[]> {
-  const s = (await db.surveys.orderBy('fw').uniqueKeys()) as number[];
-  const c = (await db.calls.orderBy('fw').uniqueKeys()) as number[];
-  return [...new Set([...s, ...c])].sort((a, b) => a - b);
+/** Per-week survey and customer-call counts (used to skip partial weeks when picking a default). */
+export async function weekCounts(): Promise<Record<number, { surveys: number; calls: number }>> {
+  const out: Record<number, { surveys: number; calls: number }> = {};
+  await db.surveys.each((s) => { (out[s.fw] ??= { surveys: 0, calls: 0 }).surveys++; });
+  await db.calls.each((c) => { if (!c.isAssociate) (out[c.fw] ??= { surveys: 0, calls: 0 }).calls++; });
+  return out;
 }
 
 export async function dataCounts() {

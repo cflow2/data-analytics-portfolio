@@ -360,7 +360,9 @@ const DRIVERS: Record<string, string[]> = {
 
 const HELPDESK_TEXT = ['Store associate needed help enrolling a customer at the register.', 'Lowe’s associate asking how to look up a member’s visit history.', 'Store associate needed the HomeCare+ SKU for a sale.'];
 
-function callNotes(rng: Rng, spec: CallSpec, storeNo?: string): string {
+const FAKE_PEOPLE = ['Jane Sample', 'John Example', 'Pat Placeholder', 'Alex Demo', 'Sam Testcase'];
+
+function callNotes(rng: Rng, spec: CallSpec, storeNo?: string, repeat = false): string {
   let reason: string;
   if (spec.cancellation && spec.theme === 'other') reason = rng.pick(CALL_TEXT.cancelOther);
   else if (spec.subTag && CALL_TEXT[spec.subTag]) reason = rng.pick(CALL_TEXT[spec.subTag]);
@@ -377,7 +379,17 @@ function callNotes(rng: Rng, spec: CallSpec, storeNo?: string): string {
         : 'Submitted cancel request to back office; refund request pending review.';
   } else if (spec.escalate) actions = 'Apologized; escalated to Field Support for follow-up.';
   else if (spec.theme === 'appointment') actions = rng.chance(0.5) ? 'Rescheduled the visit and sent confirmation.' : 'Sent confirmation of the new appointment window.';
-  return `Problem / Reason for Calling: ${reason}${store}\nCompleted Actions: ${actions}`;
+  // Synthetic PII (fictional 555-01xx numbers) so the redaction pass has something to do.
+  const pii = rng.chance(0.15)
+    ? rng.pick([
+      `CX ${rng.pick(FAKE_PEOPLE)} called from (555) 01${rng.int(0, 9)}-${rng.int(1000, 9999)}. `,
+      `Caller ${rng.pick(FAKE_PEOPLE).split(' ')[0]} asked for a callback at 555-01${rng.int(0, 9)}-${rng.int(1000, 9999)}. `,
+      `Spoke with: ${rng.pick(FAKE_PEOPLE)}, ${rng.int(100, 9999)} Sample Creek Rd. `,
+      `Member email ${rng.pick(FAKE_PEOPLE).toLowerCase().replace(' ', '.')}@example.com, order 2000${rng.int(10000000, 99999999)}. `,
+    ])
+    : '';
+  const again = repeat ? 'Member called back about the same case. ' : '';
+  return `Problem / Reason for Calling: ${again}${pii}${reason}${store}\nCompleted Actions: ${actions}`;
 }
 
 function makeCallsForWeek(rng: Rng, fw: number, t: CallWeekTargets, stores: StoreRecord[], tags: ThemeTag[]): CallRecord[] {
@@ -412,7 +424,7 @@ function makeCallsForWeek(rng: Rng, fw: number, t: CallWeekTargets, stores: Stor
     const id = `demo-call-${fw}-${i}`;
     calls.push({
       id, fw, date, driver, driverNorm: driver, caseNo, isAssociate: false,
-      notes: callNotes(rng, spec, store?.storeNo), storeNo: store?.storeNo,
+      notes: callNotes(rng, spec, store?.storeNo, prev !== undefined), storeNo: store?.storeNo,
       phoneHash: `demo-phone-${caseNo}`, sourceFile: DEMO_SOURCE, demo: true,
     });
     tags.push({

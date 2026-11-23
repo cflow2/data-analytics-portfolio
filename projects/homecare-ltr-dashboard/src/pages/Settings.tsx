@@ -1,4 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { RedactionRulesEditor } from '@/components/data/RedactionRulesEditor';
+import { useImports } from '@/state/imports';
+import { useLive } from '@/hooks/useLive';
+import { db } from '@/db/db';
 import { useSettings, applyTheme, type ThemeMode } from '@/state/settings';
 import { isISODate, weekday } from '@/lib/dates';
 import { weekInfo } from '@/lib/fiscal';
@@ -20,6 +24,11 @@ export function Settings() {
   const st = useSettings();
   const [fy, setFy] = useState(st.fyStart);
   const fyValid = isISODate(fy) && weekday(fy) === 6;
+  const addFiles = useImports((x) => x.addFiles);
+  const importOne = useImports((x) => x.importOne);
+  const mapInput = useRef<HTMLInputElement>(null);
+  const [mapMsg, setMapMsg] = useState<string | null>(null);
+  const unmapped = useLive(() => db.stores.filter((x) => !x.district).count(), []);
 
   return (
     <>
@@ -50,10 +59,33 @@ export function Settings() {
         <Card title="Appearance">
           <Select<ThemeMode> label="Theme" value={st.theme} onChange={(v) => { st.update({ theme: v }); applyTheme(v); }} options={[{ value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }, { value: 'system', label: 'System' }]} className="w-40" />
         </Card>
-        <Card title="Coming in later phases">
+        <Card title="Region / district mapping">
+          <p className="text-sm text-muted">Hierarchy is Region → District → Store. District comes from the Tracker’s store sheets when present, otherwise from a CSV with <code className="text-xs">Store #, Store Name, City, State, District, Region</code>. “Lowe’s Market” is never used as a district.</p>
+          <div className="mt-3 flex items-center gap-3">
+            <Button icon="upload" onClick={() => mapInput.current?.click()}>Upload mapping CSV</Button>
+            <span className="text-sm tnum">{unmapped.data ?? 0} unmapped store(s)</span>
+          </div>
+          <input ref={mapInput} type="file" accept=".csv,.xlsx" className="hidden" aria-label="Upload store to district mapping" onChange={async (e) => {
+            const f = e.target.files?.[0];
+            e.target.value = '';
+            if (!f) return;
+            setMapMsg('Reading…');
+            await addFiles([f]);
+            const staged = useImports.getState().files[0];
+            if (staged?.status === 'ready' && staged.parsed?.candidate?.kind === 'store-map') {
+              await importOne(staged.key);
+              const r = useImports.getState().files.find((x) => x.key === staged.key)?.report;
+              setMapMsg(`Mapped ${r?.rowsKept ?? 0} stores. ${r?.unmappedStores?.length ?? 0} still unmapped.`);
+            } else setMapMsg('That file doesn’t look like a store→district mapping. Open the Data Manager to map its columns.');
+          }} />
+          {mapMsg && <p role="status" className="mt-2 text-xs text-muted">{mapMsg}</p>}
+        </Card>
+        <Card title="Redaction rules" className="col-span-2">
+          <RedactionRulesEditor />
+        </Card>
+        <Card title="Coming in later phases" className="col-span-2">
           <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
             <li>Taxonomy editor and keyword rules (phase 4)</li>
-            <li>Region/district mapping upload and redaction rules with a test box (phase 2)</li>
             <li>AI provider settings (phase 5)</li>
           </ul>
         </Card>

@@ -4,17 +4,15 @@ import { useLive } from '@/hooks/useLive';
 import { useSelectedWeek } from '@/hooks/useWeek';
 import { useFilters, type CompareTo } from '@/state/filters';
 import { useSettings } from '@/state/settings';
-import { useUi } from '@/state/ui';
 import { weekInfo } from '@/lib/fiscal';
 import { REGIONS, regionSortKey, storeLabel, UNMAPPED } from '@/domain/geo';
 import type { ChannelFilter } from '@/domain/types';
-import { Button, Select, cx } from '@/components/ui/primitives';
+import { Select, cx } from '@/components/ui/primitives';
 
 export function FilterBar() {
   const [f, setF] = useFilters();
   const week = useSelectedWeek();
   const fyStart = useSettings((s) => s.fyStart);
-  const setPresentation = useUi((s) => s.setPresentation);
   const { data: stores } = useLive(() => db.stores.toArray(), []);
   const storeMap = useMemo(() => new Map((stores ?? []).map((s) => [s.storeNo, s])), [stores]);
 
@@ -33,12 +31,12 @@ export function FilterBar() {
 
   const weekOptions = useMemo(() => {
     const ws = Array.from({ length: 52 }, (_, i) => i + 1);
-    return ws.map((w) => ({ value: String(w), label: `${weekInfo(w, fyStart).label}${week.weeks.includes(w) ? '' : ' (no data)'}` })).reverse();
+    return ws.map((w) => ({ value: String(w), label: `${weekInfo(w, fyStart).label}${week.weeks.includes(w) ? '' : ' · no data'}` })).reverse();
   }, [fyStart, week.weeks]);
 
   return (
     <div className="sticky top-0 z-20 flex flex-wrap items-end gap-3 border-b border-border bg-surface/95 px-6 py-2.5 backdrop-blur">
-      <Select label="Fiscal week" value={String(week.fw)} onChange={(v) => setF({ fw: Number(v) })} options={weekOptions} className="w-[296px]" />
+      <Select label="Fiscal week" value={String(week.fw)} onChange={(v) => setF({ fw: Number(v) })} options={weekOptions} className="w-[318px]" />
       <Select<CompareTo>
         label="Compare to" value={f.compare} onChange={(v) => setF({ compare: v })}
         options={[{ value: 'prior', label: 'Prior week' }, { value: 'avg4', label: '4-week avg' }, { value: 'fytd', label: 'FYTD' }]}
@@ -67,9 +65,6 @@ export function FilterBar() {
           ))}
         </div>
       </fieldset>
-      <div className="ml-auto pb-0.5">
-        <Button variant="secondary" icon="present" onClick={() => setPresentation(true)}>Present</Button>
-      </div>
     </div>
   );
 }

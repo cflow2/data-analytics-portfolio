@@ -13,6 +13,7 @@ export function LeftNav() {
   const { search } = useLocation();
   const theme = useSettings((s) => s.theme);
   const setPaletteOpen = useUi((s) => s.setPaletteOpen);
+  const setPresentation = useUi((s) => s.setPresentation);
   const cycleTheme = () => {
     const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
     update({ theme: next });
@@ -68,6 +69,10 @@ export function LeftNav() {
         <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={cycleTheme} aria-label={`Theme: ${theme}. Click to change.`}>
           <Icon name={theme === 'dark' ? 'moon' : 'sun'} size={17} />
           {!collapsed && <span className="capitalize">Theme: {theme}</span>}
+        </button>
+        <button type="button" className={cx(footBtn, 'w-[calc(100%-16px)]')} onClick={() => setPresentation(true)} aria-label="Presentation mode">
+          <Icon name="present" size={17} />
+          {!collapsed && <span>Present</span>}
         </button>
       </div>
       <button

@@ -1,10 +1,26 @@
 import { db, type HomeCareDB } from '@/db/db';
 import { generateDemoData } from './generate';
+import { redact } from '@/ingest/redact';
+import { getRedactionRules } from '@/state/privacy';
+import type { OriginalText } from '@/domain/types';
 
 /** Writes the DEMO dataset into IndexedDB. Idempotent: ids are deterministic, so re-loading overwrites. */
 export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys: number; calls: number }> {
   const d = generateDemoData();
-  await database.transaction('rw', [database.stores, database.surveys, database.calls, database.followups, database.tags, database.weeks, database.signals, database.questions, database.files, database.kv], async () => {
+  // Demo text goes through the same redaction pass as real uploads.
+  const rules = await getRedactionRules(database);
+  const originals: OriginalText[] = [];
+  const pass = (recordId: string, field: OriginalText['field'], text: string) => {
+    if (!text) return { text, uncertain: false };
+    const r = redact(text, rules);
+    if (r.text !== text || r.uncertain) originals.push({ recordId, field, text });
+    return r;
+  };
+  for (const s of d.surveys) { const r = pass(s.id, 'comment', s.comment); s.comment = r.text; s.source = 'demo'; if (r.uncertain) s.redactionUncertain = true; }
+  for (const c of d.calls) { const r = pass(c.id, 'notes', c.notes); c.notes = r.text; if (r.uncertain) c.redactionUncertain = true; }
+  for (const f of d.followups) { f.comment = pass(f.id, 'comment', f.comment).text; f.insights = pass(f.id, 'insights', f.insights).text; }
+  await database.transaction('rw', [database.stores, database.surveys, database.calls, database.followups, database.tags, database.weeks, database.signals, database.questions, database.files, database.kv, database.originals], async () => {
+    await database.originals.bulkPut(originals);
     await database.stores.bulkPut(d.stores);
     await database.surveys.bulkPut(d.surveys);
     await database.calls.bulkPut(d.calls);
@@ -27,7 +43,9 @@ export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys
 /** Removes only DEMO records, leaving real uploads untouched. */
 export async function removeDemoData(database: HomeCareDB = db): Promise<void> {
   const d = generateDemoData();
-  await database.transaction('rw', [database.stores, database.surveys, database.calls, database.followups, database.tags, database.weeks, database.signals, database.questions, database.files, database.kv], async () => {
+  await database.transaction('rw', [database.stores, database.surveys, database.calls, database.followups, database.tags, database.weeks, database.signals, database.questions, database.files, database.kv, database.originals], async () => {
+    const ids = [...d.surveys.map((s) => s.id), ...d.calls.map((c) => c.id), ...d.followups.map((f) => f.id)];
+    await database.originals.where('recordId').anyOf(ids).delete();
     await database.surveys.filter((s) => !!s.demo).delete();
     await database.calls.filter((c) => !!c.demo).delete();
     await database.followups.filter((f) => !!f.demo).delete();
