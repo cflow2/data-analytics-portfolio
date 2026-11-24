@@ -56,7 +56,7 @@ export function Chart({ title, option, table, height = 260, ariaLabel, className
     <section className={cx('rounded-[12px] border border-border bg-surface p-4', className)} aria-label={ariaLabel}>
       <header className="mb-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
         {title && <h2 className="font-display text-sm font-semibold">{title}</h2>}
-        <div className="ml-auto flex items-center gap-1 whitespace-nowrap">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1 whitespace-nowrap">
           {actions}
           {msg && <span role="status" className="text-xs text-grow">{msg}</span>}
           {!presentation && (

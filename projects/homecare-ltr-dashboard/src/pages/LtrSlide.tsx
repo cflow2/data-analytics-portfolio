@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toPng } from 'html-to-image';
+import { createPortal } from 'react-dom';
 import { db } from '@/db/db';
 import { useLive } from '@/hooks/useLive';
 import { useIsLocked } from '@/hooks/useLocked';
+import { usePhone } from '@/hooks/usePhone';
 import { useWeekData } from '@/data/useWeekData';
 import { useUi } from '@/state/ui';
 import { SCREENS } from '@/screens';
@@ -57,6 +59,8 @@ export function LtrSlide() {
   const [mapSrc, setMapSrc] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const slideRef = useRef<HTMLDivElement>(null);
+  const phone = usePhone();
+  const [full, setFull] = useState(false);
   const { ref: fitRef, scale } = useFitScale();
   const note = (m: string) => { setFlash(m); setTimeout(() => setFlash(null), 2200); };
 
@@ -225,7 +229,9 @@ export function LtrSlide() {
           <div style={{ width: W * scale, height: H * scale }} className="overflow-hidden rounded-lg border border-border shadow-sm">
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: W, height: H }}>{canvas(true, slideRef)}</div>
           </div>
+          {phone && <Button className="mt-2 w-full" onClick={() => setFull(true)}>View full screen</Button>}
         </div>
+        {full && <FullScreenSlide onClose={() => setFull(false)}>{canvas(true)}</FullScreenSlide>}
 
         <div className="grid gap-3 xl:grid-cols-2">
           <Card title="Validation" actions={<span className="text-xs text-muted">Check before presenting</span>}>
@@ -343,5 +349,27 @@ function YtdEntry({ value, source, onSave }: { value: { ltr: number; n: number }
       {value && <Button variant="ghost" className="h-8" onClick={() => onSave(null)}>Clear</Button>}
       {(ltr || n) && !valid && <span className="text-xs text-surveys">Enter a % between 0 and 100 and a whole number of surveys.</span>}
     </div>
+  );
+}
+
+/** Phone: the slide fills the screen, turned sideways when the phone is upright. Tap Close (or Esc) to return. */
+function FullScreenSlide({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const [vp, setVp] = useState({ w: window.innerWidth, h: window.innerHeight });
+  useEffect(() => {
+    const on = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('resize', on); window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('resize', on); window.removeEventListener('keydown', key); };
+  }, [onClose]);
+  const upright = Math.min(vp.w / W, vp.h / H);
+  const sideways = Math.min(vp.h / W, vp.w / H);
+  const rotate = sideways > upright * 1.1;
+  const s = rotate ? sideways : upright;
+  return createPortal(
+    <div role="dialog" aria-modal="true" aria-label="LTR slide, full screen" className="fixed inset-0 z-50 overflow-hidden bg-black">
+      <div style={{ position: 'absolute', left: '50%', top: '50%', width: W, height: H, transform: `translate(-50%, -50%) ${rotate ? 'rotate(90deg) ' : ''}scale(${s})` }}>{children}</div>
+      <Button className="absolute bottom-3 right-3 z-10" style={{ marginBottom: 'env(safe-area-inset-bottom)' }} onClick={onClose} autoFocus>Close</Button>
+    </div>,
+    document.body,
   );
 }

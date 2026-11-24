@@ -1,4 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { usePhone } from '@/hooks/usePhone';
+import { Icon } from '@/components/ui/Icon';
+import { screenFor } from '@/screens';
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { LeftNav } from './LeftNav';
 import { FilterBar } from './FilterBar';
@@ -16,12 +19,24 @@ export function AppShell() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const week = useSelectedWeek();
+  const phone = usePhone();
+  const [navOpen, setNavOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  useEffect(() => { setNavOpen(false); }, [pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setNavOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navOpen]);
 
   // Move keyboard focus to the content on every screen change (keyboard and screen-reader users land on the new screen).
   const first = useRef(true);
   useEffect(() => {
+    const main = document.getElementById('main');
+    if (main) main.scrollTop = 0; // each screen starts at the top
     if (first.current) { first.current = false; return; }
-    document.getElementById('main')?.focus({ preventScroll: true });
+    main?.focus({ preventScroll: true });
   }, [pathname]);
 
   // Presentation mode: arrow keys move between screens, Esc exits.
@@ -44,7 +59,14 @@ export function AppShell() {
     <DatasetProvider>
     <div className={cx('flex h-full', presentation && 'presentation')} data-presentation={presentation || undefined}>
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-surface focus:px-3 focus:py-1">Skip to content</a>
-      {!presentation && <LeftNav />}
+      {!presentation && !phone && <LeftNav />}
+      {!presentation && phone && navOpen && (
+        <div className="fixed inset-0 z-40 flex bg-black/30" onClick={() => setNavOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Menu" className="h-full" onClick={(e) => e.stopPropagation()}>
+            <LeftNav mobile onNavigate={() => setNavOpen(false)} />
+          </div>
+        </div>
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         {presentation ? (
           <div className="flex items-center justify-between border-b border-border bg-surface px-8 py-3">
@@ -54,8 +76,20 @@ export function AppShell() {
               <Button onClick={() => setPresentation(false)}>Exit presentation</Button>
             </div>
           </div>
+        ) : phone ? (
+          <>
+            <div className="sticky top-0 z-30 flex h-12 items-center gap-2 border-b border-border bg-surface px-2" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+              <Button variant="ghost" className="h-10 w-10 px-0" aria-label="Open menu" aria-expanded={navOpen} onClick={() => setNavOpen(true)}><Icon name="menu" size={20} /></Button>
+              <div className="min-w-0 flex-1 leading-tight">
+                <div className="truncate font-display text-sm font-semibold">{screenFor(pathname).title}</div>
+                <div className="truncate text-[11px] text-muted">{week.label}</div>
+              </div>
+              <Button variant={filtersOpen ? 'primary' : 'ghost'} className="h-9 px-2 text-xs" aria-expanded={filtersOpen} aria-controls="filters" onClick={() => setFiltersOpen(!filtersOpen)}>Filters</Button>
+            </div>
+            {filtersOpen && <div id="filters"><FilterBar /></div>}
+          </>
         ) : <FilterBar />}
-        <main id="main" className={cx('flex-1 overflow-y-auto outline-none', presentation ? 'px-10 py-8' : 'px-6 py-6')} tabIndex={-1}>
+        <main id="main" className={cx('relative flex-1 overflow-y-auto outline-none', presentation ? (phone ? 'px-3 py-3' : 'px-10 py-8') : phone ? 'px-3 py-3' : 'px-6 py-6')} tabIndex={-1}>
           <div className="mx-auto max-w-[1360px]">
             <ErrorBoundary resetKey={pathname}><Outlet /></ErrorBoundary>
           </div>

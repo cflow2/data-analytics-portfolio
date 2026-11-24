@@ -179,6 +179,12 @@ One 1920×1080 slide, scaled to fit, for the weekly LTR readout (route `#/slide`
 | YTD | Shows, in order of preference: a value typed in under “Edit the slide”, then a Medallia Analytics export run from the start of the fiscal year through the slide week (its Total column: LTR and Sample Size; month or day columns both work), then the Tracker (FW1 through the slide week). Leadership's YTD (e.g. 93 on 3,629) comes from Medallia's expanded view, which counts differently from the Tracker; the validation panel shows both. |
 | Validation panel | Survey count by week, YTD (compare with the Tracker), Tracker vs Medallia week LTR, duplicate appointments (same date = warning; repeat visits = info), regions without surveys, regions missing from the division config, missing Key Drivers. |
 
+## On a phone
+
+Below 768 px wide the app switches to a phone layout: a top bar with the screen name and week, a ☰ menu that slides out, a **Filters** button that opens the filter bar, grids that stack (KPI rows go two-up), and wide tables that scroll inside their own box. Form fields use 16 px text so iOS doesn't zoom when you tap them. On **LTR Slide**, **View full screen** shows the slide filling the phone, turned sideways when the phone is upright. `npm run e2e:phone` checks every screen at iPhone size.
+
+An iPhone can't run a downloaded HTML file (the Files app only previews it, with scripts off), so on an iPhone open the app from a hosted link. Data still stays in that phone's browser storage.
+
 ## Quality checklist
 
 Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `e2e` = `npm run e2e`; `a11y` = `npm run e2e:a11y`.
@@ -211,6 +217,7 @@ Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `
 | Keyboard navigation; Ctrl+K palette | ✅ | e2e (palette navigation, visible focus, focus moves to content on navigation); drag-reorder has ▲/▼ buttons; Review Queue keys |
 | LTR Slide: FW41 values (91, ▼4, −2, 6 of 14, 20 scored 0–8, allowed 15, 198/11/9, divisions 94/89/87, trend colours) | ✅ | unit `slide/ltrMetrics.test.ts`; also checked against the real Tracker 1123 |
 | LTR Slide exports: combo chart on a secondary axis, drivers chart, talk track + back pocket, no comment parts, PNG 3840×2160 | ✅ | e2e |
+| Phone layout: every screen fits an iPhone with no sideways scrolling; menu drawer; full-screen slide | ✅ | e2e `e2e/phone.cjs` |
 | WCAG AA contrast, light and dark (axe) | ✅ | a11y: 15 screens × 2 themes, **no violations of any severity** |
 | No console errors/warnings; strict TS; lint; tests | ✅ | e2e console check; `npm run typecheck`, `npm run lint`, `npm test` |
 | `npm run build` → one HTML file that opens offline and shows the demo data | ✅ | e2e (file://); startup ≈ 0.3 s |

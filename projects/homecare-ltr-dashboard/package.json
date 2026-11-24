@@ -13,7 +13,8 @@
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint .",
     "e2e": "node e2e/checklist.cjs",
-    "e2e:a11y": "node e2e/a11y.cjs"
+    "e2e:a11y": "node e2e/a11y.cjs",
+    "e2e:phone": "node e2e/phone.cjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5.3.0",

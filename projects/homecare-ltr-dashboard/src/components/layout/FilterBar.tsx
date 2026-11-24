@@ -35,8 +35,8 @@ export function FilterBar() {
   }, [fyStart, week.weeks]);
 
   return (
-    <div className="sticky top-0 z-20 flex flex-wrap items-end gap-3 border-b border-border bg-surface/95 px-6 py-2.5 backdrop-blur">
-      <Select label="Fiscal week" value={String(week.fw)} onChange={(v) => setF({ fw: Number(v) })} options={weekOptions} className="w-[318px]" />
+    <div className="grid grid-cols-2 items-end gap-2 border-b border-border bg-surface/95 px-3 py-2.5 backdrop-blur md:sticky md:top-0 md:z-20 md:flex md:flex-wrap md:gap-3 md:px-6">
+      <Select label="Fiscal week" value={String(week.fw)} onChange={(v) => setF({ fw: Number(v) })} options={weekOptions} className="col-span-2 w-full md:w-[318px]" />
       <Select<CompareTo>
         label="Compare to" value={f.compare} onChange={(v) => setF({ compare: v })}
         options={[{ value: 'prior', label: 'Prior week' }, { value: 'avg4', label: '4-week avg' }, { value: 'fytd', label: 'FYTD' }]}
@@ -50,10 +50,10 @@ export function FilterBar() {
         options={[{ value: '', label: f.region ? 'All districts' : 'Pick a region' }, ...districts.map((d) => ({ value: d, label: d }))]}
       />
       <Select
-        label="Store" value={f.store ?? ''} onChange={(v) => setF({ store: v || null })} className="w-[172px]"
+        label="Store" value={f.store ?? ''} onChange={(v) => setF({ store: v || null })} className="w-full md:w-[172px]"
         options={[{ value: '', label: 'All stores' }, ...storeOpts.map((s) => ({ value: s.storeNo, label: storeLabel(s.storeNo, storeMap) }))]}
       />
-      <fieldset className="flex flex-col gap-0.5">
+      <fieldset className="col-span-2 flex flex-col gap-0.5 md:col-span-1">
         <legend className="text-[11px] font-medium uppercase tracking-wide text-muted">Channel</legend>
         <div className="flex h-8 overflow-hidden rounded-lg border border-border" role="radiogroup" aria-label="Channel">
           {(['surveys', 'calls', 'both'] as ChannelFilter[]).map((c) => (
