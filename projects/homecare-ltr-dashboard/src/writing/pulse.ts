@@ -1,24 +1,29 @@
-/** Daily pulse: what happened since the last business day, in ~60 seconds. */
+/** Daily pulse: what the surveys said since the last business day, in ~60 seconds. */
 import type { Dataset } from '@/data/dataset';
 import { addDays, dayName, monthDay, weekday, type ISODate } from '@/lib/dates';
-import { countBy } from '@/analytics/calls';
+import { fiscalWeek } from '@/lib/fiscal';
 import { countsForLtr } from '@/domain/survey';
 import { storeLabel } from '@/domain/geo';
-import type { CallRecord, SurveyRecord } from '@/domain/types';
+import { ltrSummary, type LtrSummary } from '@/lib/ltr';
+import type { SurveyRecord } from '@/domain/types';
 
 export interface PulseFacts {
   date: ISODate;
   from: ISODate;
   to: ISODate;
   periodLabel: string;
-  calls: CallRecord[];
-  associateCalls: number;
-  topDrivers: { key: string; count: number }[];
+  /** LTR surveys dated in the period */
+  surveys: SurveyRecord[];
+  period: LtrSummary;
+  comments: number;
   topThemes: { key: string; count: number }[];
+  /** 0–8 scores in the period, lowest first */
   detractors: { s: SurveyRecord; store: string; cause: string | null }[];
-  damage: { c: CallRecord; store: string; escalated: boolean }[];
-  cancellations: number;
-  exclusionCancels: number;
+  /** comments tagged damage/safety in the period */
+  damage: { s: SurveyRecord; store: string }[];
+  /** the fiscal week the period ends in, to date */
+  wtd: { fw: number; s: LtrSummary; allowed: number };
+  benchmark: number;
   watch: string;
   hasData: boolean;
   numbers: number[];
@@ -31,57 +36,63 @@ export function pulsePeriod(date: ISODate): { from: ISODate; to: ISODate; label:
   return { from: d, to: d, label: `yesterday (${dayName(d)} ${monthDay(d)})` };
 }
 
-export function pulseFacts(ds: Dataset, date: ISODate): PulseFacts {
+function countBy<T>(xs: T[], key: (x: T) => string): { key: string; count: number }[] {
+  const m = new Map<string, number>();
+  for (const x of xs) m.set(key(x), (m.get(key(x)) ?? 0) + 1);
+  return [...m].map(([k, count]) => ({ key: k, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
+export function pulseFacts(ds: Dataset, date: ISODate, benchmark = 93, fyStart?: ISODate): PulseFacts {
   const p = pulsePeriod(date);
   const inP = (d: ISODate) => d >= p.from && d <= p.to;
   const tname = (id: string) => ds.taxonomy.find((t) => t.id === id)?.name ?? id;
-  const all = ds.calls.filter((c) => inP(c.date));
-  const calls = all.filter((c) => !c.isAssociate);
-  const tags = calls.map((c) => ds.tags.get(c.id)).filter((t): t is NonNullable<typeof t> => !!t);
-  const dets = ds.surveys.filter((s) => inP(s.date) && countsForLtr(s) && s.ltr !== null && s.ltr < 9).sort((a, b) => a.ltr! - b.ltr!);
-  const damage = calls.filter((c) => { const t = ds.tags.get(c.id); return t && (t.primary === 'damage' || t.escalate); })
-    .map((c) => ({ c, store: c.storeNo ? storeLabel(c.storeNo, ds.stores) : 'store not stated', escalated: (ds.escalations.get(c.id)?.status ?? 'New') !== 'New' }));
-  const cancels = tags.filter((t) => t.cancellation);
+  const ltr = ds.surveys.filter(countsForLtr);
+  const surveys = ltr.filter((s) => inP(s.date) && s.ltr !== null);
+  const tags = surveys.map((s) => ds.tags.get(s.id)).filter((t): t is NonNullable<typeof t> => !!t);
+  const dets = surveys.filter((s) => s.ltr! <= 8).sort((a, b) => a.ltr! - b.ltr!);
+  const damage = surveys.filter((s) => { const t = ds.tags.get(s.id); return t && (t.primary === 'damage' || t.escalate); })
+    .map((s) => ({ s, store: storeLabel(s.storeNo, ds.stores) }));
   const topThemes = countBy(tags.filter((t) => t.primary !== 'other'), (t) => t.primary).slice(0, 3).map((x) => ({ key: tname(x.key), count: x.count }));
-  // One thing to watch
-  const days = p.from === p.to ? 1 : 2;
-  const prior = ds.calls.filter((c) => !c.isAssociate && c.date < p.from && c.date >= addDays(p.from, -7));
-  const priorDays = new Set(prior.map((c) => c.date)).size || 1;
-  const spike = countBy(tags.filter((t) => t.primary !== 'other'), (t) => t.primary).map((x) => {
-    const avg = prior.filter((c) => ds.tags.get(c.id)?.primary === x.key).length / priorDays * days;
-    return { ...x, avg, ratio: avg ? x.count / avg : x.count };
-  }).filter((x) => x.count >= 3 && x.ratio >= 1.5).sort((a, b) => b.ratio - a.ratio)[0];
-  const unesc = damage.filter((d) => !d.escalated).length;
+  const fw = fiscalWeek(p.to, fyStart);
+  const wtdS = ltrSummary(ltr.filter((s) => s.fw === fw && s.date <= p.to).map((s) => s.ltr));
+  const wtd = { fw, s: wtdS, allowed: Math.floor(wtdS.n * 0.07 + 1e-9) };
+  // One thing to watch: damage → a 0–6 that needs a 48-hour follow-up → a region with 2+ low scores → week to date below benchmark.
   const zeroSix = dets.find((s) => s.ltr! <= 6);
-  let watch = 'Nothing unusual: volumes and themes are in their normal range.';
-  if (unesc) watch = `${unesc} damage call${unesc === 1 ? '' : 's'} still need${unesc === 1 ? 's' : ''} escalation to Field Support.`;
-  else if (spike) watch = `${tname(spike.key)} calls: ${spike.count} vs about ${Math.round(spike.avg)} on a typical ${days === 1 ? 'day' : 'weekend'}.`;
-  else if (zeroSix) watch = `The ${zeroSix.ltr} score at ${storeLabel(zeroSix.storeNo, ds.stores)}: make sure the store follows up within 48 hours.`;
+  const byRegion = countBy(dets, (s) => s.region).find((x) => x.count >= 2);
+  let watch = 'Nothing unusual in yesterday’s surveys.';
+  if (damage.length) watch = `${damage.length} comment${damage.length === 1 ? '' : 's'} mention${damage.length === 1 ? 's' : ''} damage or safety; make sure Field Support has ${damage.length === 1 ? 'it' : 'them'}.`;
+  else if (zeroSix) watch = `The ${zeroSix.ltr} at ${storeLabel(zeroSix.storeNo, ds.stores)}: make sure the store follows up within 48 hours.`;
+  else if (byRegion) watch = `${byRegion.key} had ${byRegion.count} scores of 0–8.`;
+  else if (wtdS.pct !== null && wtdS.pct < benchmark) watch = `FW${fw} is at ${wtdS.pct.toFixed(1)}% so far, below ${benchmark}.`;
   const f: Omit<PulseFacts, 'numbers'> = {
-    date, from: p.from, to: p.to, periodLabel: p.label, calls, associateCalls: all.length - calls.length,
-    topDrivers: countBy(calls, (c) => c.driverNorm || c.driver).slice(0, 3), topThemes,
-    detractors: dets.map((s) => ({ s, store: storeLabel(s.storeNo, ds.stores), cause: ds.tags.get(s.id)?.primary ? tname(ds.tags.get(s.id)!.primary) : null })),
-    damage, cancellations: cancels.length, exclusionCancels: cancels.filter((t) => t.primary === 'exclusions').length,
-    watch, hasData: all.length > 0 || dets.length > 0,
+    date, from: p.from, to: p.to, periodLabel: p.label, surveys, period: ltrSummary(surveys.map((s) => s.ltr)),
+    comments: surveys.filter((s) => s.comment.trim()).length, topThemes,
+    detractors: dets.map((s) => ({ s, store: storeLabel(s.storeNo, ds.stores), cause: ds.tags.get(s.id)?.primary && ds.tags.get(s.id)!.primary !== 'other' ? tname(ds.tags.get(s.id)!.primary) : null })),
+    damage, wtd, benchmark, watch, hasData: surveys.length > 0,
   };
-  const numbers = [calls.length, f.associateCalls, ...f.topDrivers.map((x) => x.count), ...topThemes.map((x) => x.count), dets.length, ...dets.map((s) => s.ltr!), damage.length, unesc,
-    f.cancellations, f.exclusionCancels, ...(spike ? [spike.count, Math.round(spike.avg)] : []), ...dets.map((s) => Number(s.storeNo)), 48];
+  const numbers = [surveys.length, f.period.promoters, f.period.detractors, f.period.detractors0to6, f.comments, ...topThemes.map((x) => x.count), dets.length, ...dets.map((s) => s.ltr!),
+    damage.length, fw, wtdS.n, wtdS.detractors, wtd.allowed, Math.max(0, wtd.allowed - wtdS.detractors), ...(wtdS.pct !== null ? [wtdS.pct] : []), ...(f.period.pct !== null ? [f.period.pct] : []),
+    ...(byRegion ? [byRegion.count] : []), ...dets.map((s) => Number(s.storeNo)), benchmark, 48];
   return { ...f, numbers };
 }
 
 /** ~60 seconds spoken (≈ 130–160 words). Store numbers only, never names. */
 export function pulseScript(f: PulseFacts): string {
-  if (!f.hasData) return `No calls or surveys are loaded for ${f.periodLabel}.`;
+  if (!f.hasData) return `No surveys are loaded for ${f.periodLabel}.`;
   const lines: string[] = [`Good morning. Here’s the HomeCare+ pulse for ${f.periodLabel}.`];
-  if (f.calls.length) lines.push(`We took ${f.calls.length} customer call${f.calls.length === 1 ? '' : 's'}${f.topThemes.length ? `, led by ${f.topThemes.map((t) => `${t.key.toLowerCase()} (${t.count})`).join(', ')}` : ''}.`);
-  else lines.push('No customer calls are loaded for that period.');
+  const n = f.surveys.length;
+  lines.push(`${n} survey${n === 1 ? '' : 's'} came in${f.period.pct !== null ? `, ${f.period.promoters} of them 9s and 10s (${f.period.pct.toFixed(1)}%)` : ''}${f.topThemes.length ? `; comments were mostly about ${f.topThemes.map((t) => `${t.key.toLowerCase()} (${t.count})`).join(', ')}` : ''}.`);
   if (f.detractors.length) {
-    const art = (n: number) => (n === 8 || n === 11 || n === 18 ? 'an' : 'a');
+    const art = (x: number) => (x === 8 || x === 11 || x === 18 ? 'an' : 'a');
     const d = f.detractors.slice(0, 3).map((x) => `${art(x.s.ltr!)} ${x.s.ltr} at store ${x.s.storeNo}${x.cause ? ` about ${x.cause.toLowerCase()}` : ''}`);
-    lines.push(`${f.detractors.length} new detractor${f.detractors.length === 1 ? '' : 's'}: ${d.join('; ')}${f.detractors.length > 3 ? '; and more on the Detractors screen' : ''}.`);
-  } else lines.push('No new detractors.');
-  if (f.damage.length) lines.push(`${f.damage.length} damage or safety call${f.damage.length === 1 ? '' : 's'}${f.damage.some((x) => !x.escalated) ? `, ${f.damage.filter((x) => !x.escalated).length} not yet escalated` : ', all escalated'}.`);
-  if (f.cancellations) lines.push(`${f.cancellations} cancellation call${f.cancellations === 1 ? '' : 's'}, ${f.exclusionCancels} driven by service exclusions.`);
+    lines.push(`${f.detractors.length} scored 0 to 8: ${d.join('; ')}${f.detractors.length > 3 ? '; the rest are on the Detractors screen' : ''}.`);
+  } else lines.push('No scores of 0 to 8.');
+  if (f.damage.length) lines.push(`${f.damage.length} comment${f.damage.length === 1 ? '' : 's'} mention${f.damage.length === 1 ? 's' : ''} damage or safety.`);
+  const w = f.wtd;
+  if (w.s.pct !== null) {
+    const left = w.allowed - w.s.detractors;
+    lines.push(`FW${w.fw} so far: ${w.s.pct.toFixed(1)}% on ${w.s.n} surveys, ${w.s.pct >= f.benchmark ? 'at or above' : 'below'} ${f.benchmark}. ${w.s.detractors} scored 0 to 8 against ${w.allowed} allowed at ${f.benchmark}${left > 0 ? `, so ${left} to spare` : left === 0 ? ', with none to spare' : `, ${-left} over`}.`);
+  }
   lines.push(`One thing to watch: ${f.watch}`);
   return lines.join(' ');
 }

@@ -69,7 +69,7 @@ export const DEFAULT_TAXONOMY: ThemeDef[] = [
   },
   {
     id: 'other', name: 'Other / not VOC', precedence: 9, defaultStatus: 'STABLE',
-    definition: 'Routine requests, help-desk calls.',
+    definition: 'General comments with no specific theme.',
     subTags: [],
     keywords: [],
   },

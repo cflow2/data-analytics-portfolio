@@ -5,20 +5,15 @@
  *  - One primary theme + up to 3 secondary, sentiment, confidence 0–1.
  *  - Primary precedence: safety/damage > failed experience > service demand > specific praise > general praise.
  *  - Never infer a theme from the score, from Medallia topic tags, or from a blank comment.
- *  - Calls: themes come from the "Problem / Reason for Calling" part; "Completed Actions" only informs outcomes.
- *  - Associate/store help-desk calls are never tagged.
  */
 import { DEFAULT_TAXONOMY, type ThemeDef } from '@/domain/taxonomy';
-import type { ContactType, Sentiment, ThemeTag } from '@/domain/types';
+import type { Sentiment, ThemeTag } from '@/domain/types';
 
 export interface TagInput {
   id: string;
-  channel: 'survey' | 'call';
+  channel: 'survey';
   fw: number;
   text: string;
-  /** calls only */
-  driver?: string;
-  isAssociate?: boolean;
 }
 
 export const REVIEW_THRESHOLD = 0.7;
@@ -26,14 +21,6 @@ export const REVIEW_THRESHOLD = 0.7;
 // ───────── text helpers ─────────
 export function normText(s: string): string {
   return (s ?? '').replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
-}
-
-/** Split call notes into the reason (themes) and the actions (outcomes). */
-export function splitCallNotes(notes: string): { reason: string; actions: string } {
-  const t = normText(notes);
-  const m = /completed actions?\s*:/i.exec(t);
-  const reason = (m ? t.slice(0, m.index) : t).replace(/^.*?problem\s*\/?\s*reason for calling\s*:/i, '').trim();
-  return { reason, actions: m ? t.slice(m.index + m[0].length).trim() : '' };
 }
 
 const compiled = new WeakMap<ThemeDef[], { def: ThemeDef; res: { re: RegExp; weight: number; kw: string }[] }[]>();
@@ -86,14 +73,6 @@ export function sentimentOf(text: string): Sentiment {
   return 'Neutral';
 }
 
-// ───────── call outcomes ─────────
-const SUB_CANCEL = /\b(cancel(?:l?ing|l?ed)?|terminate)\s+(?:the |my |their |her |his |this )?(?:subscription|membership|homecare\+?|plan|program|service)\b|\bwants? to cancel\b(?!\s+(?:the |my |their )?(?:appointment|visit))|\b(?:requests?|requested|processed|submitted)\s+(?:a\s+)?(?:cancellation|cancel request)\b|\bcancellation\b(?!\s+of\s+(?:the |my )?(?:appointment|visit))|\bmember cancelling\b|\bcancelling\b(?!\s+(?:the |my )?(?:appointment|visit))/i;
-
-export function isCancellation(reason: string, driver = ''): boolean {
-  const r = normText(reason).replace(/\bauto-?cancel\w*/gi, '').replace(/\b(automatically|system) cancel\w*/gi, '').replace(/\bcancel\w*\s+(?:the |my |their )?(?:appointment|visit)\b/gi, '').replace(/\b(store|lowe'?s) cancel\w*/gi, '');
-  return SUB_CANCEL.test(r) || /\bcancel\s*subscript/i.test(driver);
-}
-
 function appointmentSub(t: string): string {
   if (/\b(website|web site|online|the app|app (will|won't|wouldn't|kept|is|was|crash)|error|timing out|time(s|d)? out|won'?t load|will not load|log ?in|portal|link)\b/i.test(t)) return 'Online/app failure';
   if (/\b(never showed|no[- ]show|didn'?t show|did not show|nobody (showed|came)|no one (showed|came)|missed (the |my |an |a )?appointment|waited all day)\b/i.test(t)) return 'No-show/missed';
@@ -104,17 +83,6 @@ function appointmentSub(t: string): string {
 }
 
 const FAILURE_SUBS = new Set(['Online/app failure', 'No-show/missed', 'Auto-cancel', 'Cancelled by store/Lowe’s']);
-
-function contactTypeFor(primary: string, subTag: string | undefined, cancellation: boolean): ContactType {
-  switch (primary) {
-    case 'damage': case 'completion': return 'Avoidable';
-    case 'appointment': return subTag && FAILURE_SUBS.has(subTag) ? 'Avoidable' : 'Deflectable';
-    case 'exclusions': return cancellation ? 'Avoidable' : 'Deflectable';
-    case 'associate': return subTag === 'Concern' ? 'Avoidable' : 'Necessary';
-    case 'value': case 'service-add': case 'aging': return 'Necessary';
-    default: return cancellation ? 'Necessary' : 'Deflectable';
-  }
-}
 
 // ───────── main ─────────
 /** Associate concern words; any other associate keyword is praise. */
@@ -137,8 +105,7 @@ function band(theme: string, sentiment: Sentiment, subTag?: string): number {
 }
 
 export function tagRecord(input: TagInput, taxonomy: ThemeDef[] = DEFAULT_TAXONOMY): ThemeTag | null {
-  if (input.channel === 'call' && input.isAssociate) return null; // help-desk calls are never VOC
-  const { reason, actions } = input.channel === 'call' ? splitCallNotes(input.text) : { reason: normText(input.text), actions: '' };
+  const reason = normText(input.text);
   if (!reason || reason.replace(/\[[a-z#]+\]/gi, '').replace(/[\W_]+/g, '').length < 2) return null; // never infer from blank
 
   const hits: { theme: string; score: number; kws: string[] }[] = [];
@@ -150,7 +117,6 @@ export function tagRecord(input: TagInput, taxonomy: ThemeDef[] = DEFAULT_TAXONO
     if (score > 0) hits.push({ theme: def.id, score, kws });
   }
   const sentiment = sentimentOf(reason);
-  const cancellation = input.channel === 'call' ? isCancellation(reason, input.driver) : false;
   const apptSub = hits.some((h) => h.theme === 'appointment') ? appointmentSub(reason) : undefined;
   assocConcern = hits.some((h) => h.theme === 'associate') && ASSOC_CONCERN.test(reason);
 
@@ -163,11 +129,6 @@ export function tagRecord(input: TagInput, taxonomy: ThemeDef[] = DEFAULT_TAXONO
       band(a.theme, sentiment, a.theme === 'appointment' ? apptSub : undefined) - band(b.theme, sentiment, b.theme === 'appointment' ? apptSub : undefined)
       || b.score - a.score
       || taxonomy.findIndex((t) => t.id === a.theme) - taxonomy.findIndex((t) => t.id === b.theme));
-    // A cancellation call whose reason mentions an exclusion is exclusion-driven.
-    if (cancellation && hits.some((h) => h.theme === 'exclusions') && ranked[0].theme !== 'damage') {
-      const i = ranked.findIndex((h) => h.theme === 'exclusions');
-      ranked.unshift(...ranked.splice(i, 1));
-    }
     primary = ranked[0].theme;
     secondary = ranked.slice(1, 4).map((h) => h.theme);
     const top = ranked[0];
@@ -176,19 +137,18 @@ export function tagRecord(input: TagInput, taxonomy: ThemeDef[] = DEFAULT_TAXONO
     confidence = tie ? 0.6 : top.score >= 2 ? 0.9 : 0.75;
     rationale = ranked.map((h) => `${h.theme}: ${h.kws.slice(0, 4).join(', ')}`).join(' · ');
   } else {
-    // Text present but no theme keyword: short generic praise or a routine request is "Other"; anything longer needs a human.
-    // Text present but no theme keyword: clearly positive text is general praise, a call is a routine request,
+    // Text present but no theme keyword: short or clearly positive text is general praise ("Other");
     // anything else (negative or unclear) needs a human.
     const words = reason.split(/\s+/).length;
     const clearlyPositive = sentiment === 'Positive' && !NEG.test(reason);
     NEG.lastIndex = 0;
-    confidence = input.channel === 'call' || (words <= 10 && sentiment !== 'Negative') ? 0.8 : clearlyPositive ? 0.75 : 0.55;
+    confidence = words <= 10 && sentiment !== 'Negative' ? 0.8 : clearlyPositive ? 0.75 : 0.55;
     rationale = clearlyPositive ? 'General praise (no theme keywords)' : 'No theme keywords matched';
   }
 
   let subTag: string | undefined;
   if (primary === 'appointment') subTag = apptSub;
-  else if (primary === 'exclusions') subTag = cancellation ? 'Exclusion drove cancel' : 'Exclusion question';
+  else if (primary === 'exclusions') subTag = 'Exclusion question';
   else if (primary === 'value' && /\brefund/i.test(reason) && /\b(dispute|not performed|never performed|wasn'?t performed|charge|charged|want(s)? (a |my )?refund|requesting a refund)\b/i.test(reason)) subTag = 'Refund dispute';
   else if (primary === 'associate') subTag = assocConcern ? 'Concern' : 'Praise';
 
@@ -196,29 +156,6 @@ export function tagRecord(input: TagInput, taxonomy: ThemeDef[] = DEFAULT_TAXONO
     recordId: input.id, channel: input.channel, fw: input.fw, primary, secondary, subTag, sentiment,
     confidence, source: 'Rule', rationale,
   };
-  if (input.channel === 'call') {
-    tag.cancellation = cancellation;
-    tag.contactType = contactTypeFor(primary, subTag, cancellation);
-    tag.escalate = primary === 'damage' || secondary.includes('damage');
-    void actions;
-  } else if (primary === 'damage') tag.escalate = true;
+  if (primary === 'damage') tag.escalate = true;
   return tag;
-}
-
-// ───────── outcomes from "Completed Actions" (calls) ─────────
-export interface CallOutcome {
-  cancellation: 'Processed' | 'Requested' | 'Not stated';
-  window: 'Within 30 days' | 'After 30 days' | 'Not stated';
-  refund: 'Refund processed' | 'Refund requested' | 'No refund' | 'Not stated';
-}
-
-export function callOutcome(notes: string): CallOutcome {
-  const t = normText(notes).toLowerCase();
-  const cancellation = /\bprocessed (the )?cancel|\bcancel(lation)? (was )?processed|\bcancelled the (subscription|membership)/.test(t) ? 'Processed'
-    : /\bcancel(lation)? request|submitted (a )?cancel|request(ed)? to cancel|wants to cancel|cancel request/.test(t) ? 'Requested' : 'Not stated';
-  const window = /\bwithin (the )?30 days\b/.test(t) ? 'Within 30 days' : /\b(outside|after|past|beyond) (the )?30 days\b/.test(t) ? 'After 30 days' : 'Not stated';
-  const refund = /\bno refund|refund (was )?denied|not eligible for (a )?refund/.test(t) ? 'No refund'
-    : /\brefund (was )?(processed|issued|completed)|processed (a |the )?refund|issued (a |the )?refund/.test(t) ? 'Refund processed'
-      : /\brefund (request|requested|pending)|request(ed|ing)? (a )?refund|wants a refund/.test(t) ? 'Refund requested' : 'Not stated';
-  return { cancellation, window, refund };
 }

@@ -6,8 +6,7 @@ import { useFilters, type CompareTo } from '@/state/filters';
 import { useSettings } from '@/state/settings';
 import { weekInfo } from '@/lib/fiscal';
 import { REGIONS, regionSortKey, storeLabel, UNMAPPED } from '@/domain/geo';
-import type { ChannelFilter } from '@/domain/types';
-import { Select, cx } from '@/components/ui/primitives';
+import { Select } from '@/components/ui/primitives';
 
 export function FilterBar() {
   const [f, setF] = useFilters();
@@ -53,18 +52,6 @@ export function FilterBar() {
         label="Store" value={f.store ?? ''} onChange={(v) => setF({ store: v || null })} className="w-full md:w-[172px]"
         options={[{ value: '', label: 'All stores' }, ...storeOpts.map((s) => ({ value: s.storeNo, label: storeLabel(s.storeNo, storeMap) }))]}
       />
-      <fieldset className="col-span-2 flex flex-col gap-0.5 md:col-span-1">
-        <legend className="text-[11px] font-medium uppercase tracking-wide text-muted">Channel</legend>
-        <div className="flex h-8 overflow-hidden rounded-lg border border-border" role="radiogroup" aria-label="Channel">
-          {(['surveys', 'calls', 'both'] as ChannelFilter[]).map((c) => (
-            <button
-              key={c} type="button" role="radio" aria-checked={f.channel === c}
-              onClick={() => setF({ channel: c })}
-              className={cx('motion px-3 text-sm capitalize', f.channel === c ? 'bg-calls-soft font-medium text-calls' : 'text-muted hover:bg-surface-2')}
-            >{c}</button>
-          ))}
-        </div>
-      </fieldset>
     </div>
   );
 }

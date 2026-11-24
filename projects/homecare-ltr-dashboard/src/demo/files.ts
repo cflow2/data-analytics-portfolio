@@ -1,13 +1,13 @@
 /**
  * DEMO source files, shaped like the real exports (and as messy): Tracker header on row 3 with ~300 columns,
- * Loyalty Case workbooks with varying sheet names, text dates, Case # with leading newlines and day-before rows.
+ * Medallia exports, Customer Commentary and the detractor follow-up file.
  * Used by the parser tests and offered on the Data Manager so the uploader can be tried end to end.
  */
 import * as XLSX from 'xlsx';
 import { dayNumber, addDays, type ISODate } from '@/lib/dates';
 import { weekStart, fiscalMonth, fiscalQuarter, weekEnd } from '@/lib/fiscal';
 import { ATTRIBUTES } from '@/domain/attributes';
-import type { CallRecord, SurveyRecord } from '@/domain/types';
+import type { SurveyRecord } from '@/domain/types';
 import { generateDemoData, type DemoData } from './generate';
 
 export interface DemoFile { name: string; data: ArrayBuffer }
@@ -53,17 +53,6 @@ export function trackerAoa(surveys: SurveyRecord[], opts: { columns?: number; mi
     row[pos[real[9]]] = s.comment || null;
     rows.push(row);
   }
-  return rows;
-}
-
-function loyaltyAoa(calls: CallRecord[], textDates: boolean): unknown[][] {
-  const rows: unknown[][] = [['Call Date', 'Call Driver', 'Case #', 'Case Notes']];
-  calls.forEach((c, i) => rows.push([
-    textDates || i % 3 === 0 ? usDate(c.date) : dateCell(c.date),
-    c.driver,
-    i % 4 === 0 ? `\n\n${c.caseNo}` : i % 7 === 0 ? `${c.caseNo} \n` : c.caseNo,
-    c.notes,
-  ]));
   return rows;
 }
 
@@ -131,27 +120,7 @@ export function demoFiles(d: DemoData = generateDemoData()): DemoFile[] {
       ...d.surveys.filter((s) => s.fw === 40 && s.comment).map((s) => [usDate(s.date), s.ltr, s.comment])]]]),
   });
 
-  // 5. Loyalty Cases, FW40: one range file (with FW39's Friday) and daily files that repeat the day before.
-  const fw40 = weekStart(40);
-  const callsOn = (date: ISODate) => d.calls.filter((c) => c.date === date);
-  const rangeCalls = [...callsOn(addDays(fw40, -1)), ...callsOn(fw40), ...callsOn(addDays(fw40, 1))];
-  files.push({ name: '10.30-11.1.2026_HC_Loyalty_Cases_DEMO.xlsx', data: book([['Sheet1', loyaltyAoa(rangeCalls, false)]]) });
-  const sheetNames = (date: ISODate, i: number) => {
-    const [y, m, dd] = date.split('-');
-    const us = `${+m}.${+dd}.${y}`;
-    return [us, `${us} Cases`, 'Sheet1', 'Cases'][i % 4];
-  };
-  for (let i = 2; i < 7; i++) {
-    const date = addDays(fw40, i);
-    const prevDay = callsOn(addDays(date, -1)).slice(0, 12); // "daily files often include the day before"
-    const [y, m, dd] = date.split('-');
-    files.push({
-      name: `${+m}.${+dd}.${y}_HC_Loyalty_Cases_DEMO.xlsx`,
-      data: book([[sheetNames(date, i), loyaltyAoa([...prevDay, ...callsOn(date)], i % 2 === 0)]]),
-    });
-  }
-
-  // 6. Detractor follow-up file for FW40
+  // 5. Detractor follow-up file for FW40
   files.push({
     name: 'FW40_DEMO.xlsx',
     data: book([['FW40', [['LL', 'Score', 'Comment', 'Store', 'SM', 'Insights', 'Region', 'FW', 'FQ', 'FP'],

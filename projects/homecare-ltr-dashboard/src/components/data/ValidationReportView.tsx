@@ -1,6 +1,4 @@
 import { monthDay, rangeLabel } from '@/lib/dates';
-import { weekInfo } from '@/lib/fiscal';
-import { useSettings } from '@/state/settings';
 import type { ValidationReport } from '@/ingest/types';
 import { cx } from '@/components/ui/primitives';
 
@@ -18,8 +16,7 @@ const REDACTION_LABEL: Record<string, string> = {
   'name-cue': 'names', 'staff-cue': 'names', 'first-name': 'names', 'name-verb': 'names', 'known-names': 'names',
 };
 
-export function ValidationReportView({ report, selectedWeek }: { report: ValidationReport; selectedWeek?: number }) {
-  const fyStart = useSettings((s) => s.fyStart);
+export function ValidationReportView({ report }: { report: ValidationReport }) {
   const dropped = Object.entries(report.dropped);
   const totalDropped = dropped.reduce((a, [, n]) => a + n, 0);
   const weeks = Object.entries(report.weeks).map(([w, n]) => [Number(w), n] as const).sort((a, b) => a[0] - b[0]);
@@ -28,7 +25,6 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
     a[label] = (a[label] ?? 0) + n;
     return a;
   }, {}));
-  const sel = report.targetWeek ?? selectedWeek;
   return (
     <dl className="mt-2">
       <Row label="Rows">{report.rowsRead.toLocaleString()} read · {report.rowsKept.toLocaleString()} kept · {totalDropped.toLocaleString()} dropped</Row>
@@ -38,9 +34,8 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
         </Row>
       )}
       {report.dateRange && (
-        <Row label="Dates found" flag={!!sel && weeks.some(([w]) => w !== sel) && report.kind === 'loyalty-cases'}>
+        <Row label="Dates found">
           {rangeLabel(report.dateRange[0], report.dateRange[1])}, {report.dateRange[0].slice(0, 4)}
-          {sel && report.kind === 'loyalty-cases' ? <> · importing into {weekInfo(sel, fyStart).label.split(' · ').slice(0, 2).join(' · ')}</> : null}
         </Row>
       )}
       {weeks.length > 0 && (
@@ -50,17 +45,6 @@ export function ValidationReportView({ report, selectedWeek }: { report: Validat
       )}
       {report.alreadyLoaded !== undefined && report.alreadyLoaded > 0 && <Row label="Already loaded">{report.alreadyLoaded.toLocaleString()} rows were already in the database (updated, not duplicated)</Row>}
       {report.merged !== undefined && report.merged > 0 && <Row label="Merged into Tracker surveys">{report.merged.toLocaleString()}</Row>}
-      {report.duplicates && (
-        <Row label="Cases" flag={report.duplicates.duplicateRows > 0}>
-          {report.duplicates.distinctCases.toLocaleString()} distinct Case # · {report.duplicates.repeatCaseRows} repeat-case rows · {report.duplicates.duplicateRows} exact duplicate rows removed
-        </Row>
-      )}
-      {report.associateCalls !== undefined && <Row label="Associate/store calls">{report.associateCalls} (counted separately, never in VOC)</Row>}
-      {report.driverMapping && report.driverMapping.length > 0 && (
-        <Row label="Call Driver typos (grouping only)">
-          <ul>{report.driverMapping.map((m) => <li key={m.original}>“{m.original}” → “{m.normalized}”</li>)}</ul>
-        </Row>
-      )}
       {report.scoreMismatches && (
         <Row label="Score vs LTR" flag={report.scoreMismatches.length > 0}>
           {report.scoreMismatches.length === 0 ? 'All Score (100/0) values agree with Likelihood to Recommend.' : (

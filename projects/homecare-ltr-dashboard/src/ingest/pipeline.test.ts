@@ -6,7 +6,7 @@ import { generateDemoData } from '@/demo/generate';
 import { ltrSummary } from '@/lib/ltr';
 import { countsForLtr } from '@/domain/survey';
 import { DEFAULT_FY_START } from '@/lib/fiscal';
-import { parseFile, defaultTargetWeek } from './parse';
+import { parseFile } from './parse';
 import { commitParsed } from './commit';
 import { DEFAULT_REDACTION_RULES } from './redact';
 import { hashBytes } from './normalize';
@@ -36,59 +36,38 @@ describe('parsing real-shaped files', () => {
     expect([fw40.n, fw40.pct!.toFixed(1), fw40.detractors, fw40.detractors0to6]).toEqual([131, '94.7', 7, 2]);
   });
 
-  it('Loyalty Cases: mixed sheet names, text dates, Case # with newlines, day-before rows', () => {
-    const loyalty = files.filter((f) => /Loyalty/.test(f.name));
-    expect(loyalty).toHaveLength(6);
-    for (const f of loyalty) {
-      const p = parseFile(req(f.name, f.data));
-      expect(p.candidate?.kind).toBe('loyalty-cases');
-      expect(p.build!.calls.every((c) => !/\s/.test(c.caseNo))).toBe(true);
-    }
-    const range = parseFile(req(file(/10\.30-11\.1/).name, file(/10\.30-11\.1/).data));
-    expect(Object.keys(range.build!.report.weeks).map(Number).sort()).toEqual([39, 40]);
-    expect(defaultTargetWeek(range.build!.report.weeks, 40)).toBe(40);
-    expect(range.build!.report.driverMapping!.some((m) => m.original === 'Genearl Program Inquiries')).toBe(true);
-  });
-
-  it('redacts PII in call notes and keeps originals separately', () => {
-    const all = files.filter((f) => /Loyalty/.test(f.name)).map((f) => parseFile(req(f.name, f.data)).build!);
-    const notes = all.flatMap((b) => b.calls.map((c) => c.notes)).join('\n');
-    expect(notes).not.toMatch(/\(555\)|555-01\d|@example\.com|Jane Sample|Sample Creek Rd|2000\d{8}/);
-    expect(notes).toMatch(/\[name\]|\[phone\]/);
-    const originals = all.flatMap((b) => b.originals.map((o) => o.text)).join('\n');
-    expect(originals).toMatch(/555/);
+  it('redacts PII in survey comments and keeps originals separately', () => {
+    const b = parseFile(req(file(/Tracker/).name, file(/Tracker/).data)).build!;
+    const comments = b.surveys.map((x) => x.comment).join('\n');
+    expect(comments).not.toMatch(/\(555\)|555-01\d|Jane Sample/);
+    expect(comments).toMatch(/\[name\]|\[phone\]/);
+    expect(b.originals.map((o) => o.text).join('\n')).toMatch(/555/);
   });
 
   it('a renamed column triggers mapping; the remembered mapping is applied next time', () => {
-    const aoa = [['Call Date', 'Reason Code', 'Case #', 'Case Notes'], ['11/2/2026', 'Cancel Subscription', 'X1', 'Problem / Reason for Calling: cancel']];
+    const aoa = [['date', 'rating', 'comment'], ['11/2/2026', 9, 'Great visit']];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1');
     const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
-    const first = parseFile(req('11.2.2026_HC_Loyalty_Cases.xlsx', buf));
-    expect(first.candidate?.kind).toBe('loyalty-cases');
-    expect(first.candidate?.missing).toEqual(['driver']);
+    const first = parseFile(req('Customer_Commentary_renamed.xlsx', buf));
+    expect(first.candidate?.kind).toBe('commentary');
+    expect(first.candidate?.missing).toEqual(['ltr']);
     expect(first.build).toBeUndefined();
-    const second = parseFile(req('11.2.2026_HC_Loyalty_Cases.xlsx', buf, { remembered: { 'loyalty-cases': { driver: 'reason code' } } }));
+    const second = parseFile(req('Customer_Commentary_renamed.xlsx', buf, { remembered: { commentary: { ltr: 'rating' } } }));
     expect(second.candidate?.missing).toEqual([]);
-    expect(second.build!.calls).toHaveLength(1);
+    expect(second.build!.surveys).toHaveLength(1);
   });
 
-  it('10,000 survey rows + 2,000 call rows parse in under 3 seconds', () => {
+  it('10,000 survey rows parse in under 3 seconds', () => {
     const many = Array.from({ length: 10_000 }, (_, i) => ({ ...demo.surveys[i % demo.surveys.length], id: `P${i}` }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trackerAoa(many)), 'Export Data');
     const tBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer;
-    const calls = Array.from({ length: 2000 }, (_, i) => demo.calls[i % demo.calls.length]);
-    const wb2 = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb2, XLSX.utils.aoa_to_sheet([['Call Date', 'Call Driver', 'Case #', 'Case Notes'], ...calls.map((c, i) => [c.date, c.driver, `${c.caseNo}-${i}`, c.notes])]), 'Sheet1');
-    const cBuf = XLSX.write(wb2, { type: 'array', bookType: 'xlsx', compression: true }) as ArrayBuffer;
     const t0 = performance.now();
     const a = parseFile(req('LTR_Tracker_big.xlsx', tBuf));
-    const b = parseFile(req('big_HC_Loyalty_Cases.xlsx', cBuf));
     const ms = performance.now() - t0;
     expect(a.build!.surveys.length).toBe(10_000);
-    expect(b.build!.calls.length).toBe(2000);
-    console.info(`parse 10k surveys + 2k calls: ${ms.toFixed(0)} ms`);
+    console.info(`parse 10k surveys: ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(3000);
   }, 60_000);
 });
@@ -99,12 +78,11 @@ describe('import pipeline end to end (demo files → IndexedDB)', () => {
 
   beforeAll(async () => {
     // Medallia first (before the Tracker) to prove later folding works.
-    const order = [/Responses/, /Tracker/, /Commentary/, /^Analytics/, /Loyalty/, /^FW40/, /Store_District/];
+    const order = [/Responses/, /Tracker/, /Commentary/, /^Analytics/, /^FW40/, /Store_District/];
     for (const re of order) {
       for (const f of files.filter((x) => re.test(x.name))) {
         const p = parseFile(req(f.name, f.data));
-        const target = p.build?.kind === 'loyalty-cases' ? 40 : undefined;
-        reports[f.name] = await commitParsed(p, { targetWeek: target, database: db });
+        reports[f.name] = await commitParsed(p, { database: db });
       }
     }
   }, 60_000);
@@ -115,12 +93,6 @@ describe('import pipeline end to end (demo files → IndexedDB)', () => {
     expect([s.n, s.pct!.toFixed(1), s.detractors, s.detractors0to6]).toEqual([131, '94.7', 7, 2]);
     const fytd = ltrSummary((await db.surveys.where('fw').between(1, 40, true, true).toArray()).filter(countsForLtr).map((x) => x.ltr));
     expect([fytd.n, fytd.pct!.toFixed(1)]).toEqual([3736, '93.1']);
-    const calls = await db.calls.where('fw').equals(40).toArray();
-    const customer = calls.filter((c) => !c.isAssociate);
-    expect(customer.length).toBe(340);
-    expect(new Set(customer.map((c) => c.caseNo)).size).toBe(309);
-    expect(calls.length - customer.length).toBe(36);
-    expect(await db.calls.where('fw').equals(39).count()).toBe(0);
   });
 
   it('merges Medallia attributes and commentary into Tracker surveys (no duplicate surveys)', async () => {
@@ -139,13 +111,6 @@ describe('import pipeline end to end (demo files → IndexedDB)', () => {
     expect(check[0].medalliaPct).toBeCloseTo(check[0].trackerPct!, 1);
   });
 
-  it('drops calls outside the selected week and reports it', () => {
-    const r = reports['10.30-11.1.2026_HC_Loyalty_Cases_DEMO.xlsx'];
-    expect(r.targetWeek).toBe(40);
-    expect(r.outsideWeek).toBeGreaterThan(0);
-    expect(r.dropped['Dated outside FW40']).toBe(r.outsideWeek);
-  });
-
   it('follow-up cross-check names the surveys missing from the follow-up file', () => {
     const fc = reports['FW40_DEMO.xlsx'].followupCheck!.find((c) => c.fw === 40)!;
     expect(fc.trackerNonPromoters).toBe(7);
@@ -157,13 +122,13 @@ describe('import pipeline end to end (demo files → IndexedDB)', () => {
   });
 
   it('uploading the same files again does not duplicate records', async () => {
-    const before = [await db.surveys.count(), await db.calls.count(), await db.followups.count()];
-    for (const f of files.filter((x) => /Tracker|Loyalty|^FW40/.test(x.name))) {
+    const before = [await db.surveys.count(), await db.followups.count()];
+    for (const f of files.filter((x) => /Tracker|^FW40/.test(x.name))) {
       const p = parseFile(req(f.name, f.data));
-      const r = await commitParsed(p, { targetWeek: p.build?.kind === 'loyalty-cases' ? 40 : undefined, database: db });
+      const r = await commitParsed(p, { database: db });
       expect(r.alreadyLoaded).toBe(r.rowsKept);
     }
-    expect([await db.surveys.count(), await db.calls.count(), await db.followups.count()]).toEqual(before);
+    expect([await db.surveys.count(), await db.followups.count()]).toEqual(before);
   }, 60_000);
 
   it('unmapped stores are reported', async () => {

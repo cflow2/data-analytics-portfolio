@@ -4,7 +4,6 @@ import { dataCounts } from '@/db/queries';
 import { exportBackup, importBackup, clearAllData } from '@/db/backup';
 import { loadDemoData, removeDemoData } from '@/demo/load';
 import { useLive } from '@/hooks/useLive';
-import { useSelectedWeek } from '@/hooks/useWeek';
 import { ltrSummary } from '@/lib/ltr';
 import { weekInfo } from '@/lib/fiscal';
 import { countsForLtr } from '@/domain/survey';
@@ -29,13 +28,13 @@ function download(name: string, data: BlobPart, type = 'application/json') {
 
 const ACCEPT = '.xlsx,.xlsm,.xls,.csv';
 
-function DropZone({ selectedWeek }: { selectedWeek: number }) {
+function DropZone() {
   const addFiles = useImports((s) => s.addFiles);
   const [over, setOver] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const take = (list: FileList | null) => {
     const files = [...(list ?? [])].filter((f) => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name));
-    if (files.length) void addFiles(files, selectedWeek);
+    if (files.length) void addFiles(files);
   };
   return (
     <div
@@ -46,14 +45,14 @@ function DropZone({ selectedWeek }: { selectedWeek: number }) {
     >
       <Icon name="upload" size={26} className="mb-2 text-muted" />
       <p className="text-sm font-medium">Drop this week’s files here</p>
-      <p className="mt-1 max-w-xl text-xs text-muted">LTR Tracker · Medallia Responses export · Analytics driver report · Customer Commentary · Loyalty Case files (many at once) · Detractor follow-up file · Store→District CSV. Each file is detected from its sheets and headers and read off the main thread.</p>
+      <p className="mt-1 max-w-xl text-xs text-muted">LTR Tracker · Medallia Responses export · Analytics driver report · Customer Commentary · Detractor follow-up file · Store→District CSV. Each file is detected from its sheets and headers and read off the main thread.</p>
       <Button className="mt-3" icon="upload" onClick={() => input.current?.click()}>Choose files…</Button>
       <input ref={input} type="file" multiple accept={ACCEPT} className="hidden" aria-label="Choose files to upload" onChange={(e) => { take(e.target.files); e.target.value = ''; }} />
     </div>
   );
 }
 
-function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSummary>; calls: number; assoc: number; followups: number; locked: boolean }; fyStart: string }) {
+function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSummary>; followups: number; locked: boolean }; fyStart: string }) {
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -62,7 +61,6 @@ function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSu
       <td className="py-1.5">{weekInfo(w.fw, fyStart).label}</td>
       <td>{w.ltr.n ? <PctN pct={w.ltr.pct} n={w.ltr.n} /> : <span className="text-muted">—</span>}</td>
       <td className="tnum">{w.ltr.n ? `${w.ltr.detractors} (${w.ltr.detractors0to6} at 0–6)` : '—'}</td>
-      <td className="tnum">{w.calls ? `${w.calls} (+${w.assoc} assoc.)` : '—'}</td>
       <td className="tnum">{w.followups || '—'}</td>
       <td>
         <div className="flex items-center justify-end gap-1">
@@ -90,7 +88,6 @@ function WeekRow({ w, fyStart }: { w: { fw: number; ltr: ReturnType<typeof ltrSu
 export function DataManager() {
   const s = SCREENS.find((x) => x.path === '/data')!;
   const fyStart = useSettings((x) => x.fyStart);
-  const week = useSelectedWeek();
   const staged = useImports((x) => x.files);
   const importAll = useImports((x) => x.importAll);
   const clearFinished = useImports((x) => x.clearFinished);
@@ -104,14 +101,12 @@ export function DataManager() {
   const files = useLive(() => db.files.orderBy('importedAt').reverse().toArray(), []);
   const unmapped = useLive(() => db.stores.filter((x) => !x.district).toArray(), []);
   const weeks = useLive(async () => {
-    const [surveys, calls, fus, metas] = await Promise.all([db.surveys.toArray(), db.calls.toArray(), db.followups.toArray(), db.weeks.toArray()]);
-    const fws = [...new Set([...surveys.map((x) => x.fw), ...calls.map((x) => x.fw)])].sort((a, b) => b - a);
+    const [surveys, fus, metas] = await Promise.all([db.surveys.toArray(), db.followups.toArray(), db.weeks.toArray()]);
+    const fws = [...new Set(surveys.map((x) => x.fw))].sort((a, b) => b - a);
     return fws.map((fw) => {
-      const wc = calls.filter((x) => x.fw === fw);
-      const cust = wc.filter((c) => !c.isAssociate).length;
       return {
         fw, ltr: ltrSummary(surveys.filter((x) => x.fw === fw && countsForLtr(x)).map((x) => x.ltr)),
-        calls: cust, assoc: wc.length - cust, followups: fus.filter((f) => f.fw === fw).length,
+        followups: fus.filter((f) => f.fw === fw).length,
         locked: !!metas.find((m) => m.fw === fw)?.locked,
       };
     });
@@ -127,7 +122,7 @@ export function DataManager() {
     <>
       <PageHeader title={s.title} subtitle={s.subtitle} />
 
-      <DropZone selectedWeek={week.fw} />
+      <DropZone />
 
       {staged.length > 0 && (
         <section className="mt-3" aria-label="Files in this upload">
@@ -138,7 +133,7 @@ export function DataManager() {
               <Button variant="primary" disabled={!readyCount} onClick={() => importAll()}>Import all ready ({readyCount})</Button>
             </div>
           </div>
-          <div className="space-y-2">{staged.map((f) => <FileCard key={f.key} file={f} selectedWeek={week.fw} />)}</div>
+          <div className="space-y-2">{staged.map((f) => <FileCard key={f.key} file={f} />)}</div>
         </section>
       )}
 
@@ -146,7 +141,7 @@ export function DataManager() {
         <Card title="What’s loaded" className="col-span-2">
           {counts.loading ? <Skeleton className="h-16" /> : counts.data && (
             <dl className="grid grid-cols-6 gap-3 text-sm">
-              {([['Surveys', counts.data.surveys], ['Calls', counts.data.calls], ['Follow-ups', counts.data.followups], ['Stores', counts.data.stores], ['Unmapped stores', counts.data.unmapped], ['Files', counts.data.files]] as const).map(([k, v]) => (
+              {([['Surveys', counts.data.surveys], ['Follow-ups', counts.data.followups], ['Stores', counts.data.stores], ['Unmapped stores', counts.data.unmapped], ['Files', counts.data.files]] as const).map(([k, v]) => (
                 <div key={k}><dt className="text-xs text-muted">{k}</dt><dd className={cx('font-display text-2xl font-semibold tnum', k === 'Unmapped stores' && v > 0 && 'text-surveys')}>{v.toLocaleString()}</dd></div>
               ))}
             </dl>
@@ -160,7 +155,7 @@ export function DataManager() {
         <Card title="Demo data" actions={<DemoBanner />}>
           <p className="mb-3 text-sm text-muted">Synthetic, labeled data that reproduces the FW38–FW40 baselines. No real names.</p>
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" disabled={!!busy} onClick={() => run('demo', async () => { const r = await loadDemoData(); return `Loaded ${r.surveys.toLocaleString()} demo surveys and ${r.calls.toLocaleString()} demo calls.`; })}>
+            <Button variant="primary" disabled={!!busy} onClick={() => run('demo', async () => { const r = await loadDemoData(); return `Loaded ${r.surveys.toLocaleString()} demo surveys.`; })}>
               {busy === 'demo' ? 'Loading…' : 'Load demo data'}
             </Button>
             <Button disabled={!!busy} onClick={() => run('rmdemo', async () => { await removeDemoData(); return 'Demo data removed. Real uploads were not touched.'; })}>Remove demo</Button>
@@ -180,7 +175,7 @@ export function DataManager() {
           <div className="max-h-[380px] overflow-y-auto" tabIndex={0}>
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-surface text-left text-xs text-muted">
-                <tr><th className="py-1.5 font-medium">Week</th><th className="font-medium">LTR</th><th className="font-medium">Detractors (0–8)</th><th className="font-medium">Customer calls</th><th className="font-medium">Follow-ups</th><th className="text-right font-medium">Actions</th></tr>
+                <tr><th className="py-1.5 font-medium">Week</th><th className="font-medium">LTR</th><th className="font-medium">Detractors (0–8)</th><th className="font-medium">Follow-ups</th><th className="text-right font-medium">Actions</th></tr>
               </thead>
               <tbody>{weeks.data.map((w) => <WeekRow key={w.fw} w={w} fyStart={fyStart} />)}</tbody>
             </table>

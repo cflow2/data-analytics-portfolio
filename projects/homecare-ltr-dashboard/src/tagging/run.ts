@@ -13,11 +13,8 @@ export async function runRuleTagging(opts: { fws?: number[]; database?: HomeCare
   const database = opts.database ?? defaultDb;
   const tax = await getTaxonomy(database);
   const locked = new Set((await database.weeks.toArray()).filter((w) => w.locked).map((w) => w.fw));
-  const [surveys, calls] = await Promise.all([
-    opts.fws ? database.surveys.where('fw').anyOf(opts.fws).toArray() : database.surveys.toArray(),
-    opts.fws ? database.calls.where('fw').anyOf(opts.fws).toArray() : database.calls.toArray(),
-  ]);
-  const ids = [...surveys.map((s) => s.id), ...calls.map((c) => c.id)];
+  const surveys = opts.fws ? await database.surveys.where('fw').anyOf(opts.fws).toArray() : await database.surveys.toArray();
+  const ids = surveys.map((s) => s.id);
   const existing = new Map((await database.tags.bulkGet(ids)).filter((t): t is ThemeTag => !!t).map((t) => [t.recordId, t]));
   const put: ThemeTag[] = [];
   const del: string[] = [];
@@ -30,10 +27,7 @@ export async function runRuleTagging(opts: { fws?: number[]; database?: HomeCare
     else if (prev) del.push(id);
   };
   // Work in small chunks and yield between them so the UI never freezes on big imports.
-  const jobs: (() => void)[] = [
-    ...surveys.map((s) => () => consider(s.id, tagRecord({ id: s.id, channel: 'survey', fw: s.fw, text: s.comment }, tax))),
-    ...calls.map((c) => () => consider(c.id, tagRecord({ id: c.id, channel: 'call', fw: c.fw, text: c.notes, driver: c.driver, isAssociate: c.isAssociate }, tax))),
-  ];
+  const jobs: (() => void)[] = surveys.map((s) => () => consider(s.id, tagRecord({ id: s.id, channel: 'survey', fw: s.fw, text: s.comment }, tax)));
   for (let i = 0; i < jobs.length; i += CHUNK) {
     for (const j of jobs.slice(i, i + CHUNK)) j();
     if (i + CHUNK < jobs.length) await yieldToUi();

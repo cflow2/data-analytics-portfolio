@@ -29,8 +29,7 @@ export function StoreDrawer({ storeNo, fw, onClose }: { storeNo: string; fw: num
     const last8 = surveys.filter((s) => s.fw > fw - 8 && s.fw <= fw);
     const attrs = attributeScores(last8, [], true);
     const dets = detractorRows(surveys.filter((s) => s.fw <= fw), ds.followups, ds.tags, ds.stores, todayISO());
-    const calls = ds.calls.filter((c) => c.storeNo === storeNo && !c.isAssociate).sort((a, b) => b.date.localeCompare(a.date));
-    return { surveys, m, weeks, attrs, dets, calls, cur: weekOf(m, fw), l8: poolWeeks(m, fw - 7, fw), fytd: poolWeeks(m, 1, fw) };
+    return { surveys, m, weeks, attrs, dets, cur: weekOf(m, fw), l8: poolWeeks(m, fw - 7, fw), fytd: poolWeeks(m, 1, fw) };
   }, [ds, storeNo, fw]);
   if (!ds || !v) return null;
   const st = ds.stores.get(storeNo);
@@ -83,18 +82,6 @@ export function StoreDrawer({ storeNo, fw, onClose }: { storeNo: string; fw: num
             );
           })}
         </ul>
-      </Card>
-      <Card title={`Calls mentioning this store · ${v.calls.length}`}>
-        {v.calls.length === 0 ? <p className="text-sm text-muted">No call notes mention store #{storeNo}.</p> : (
-          <ul className="max-h-72 divide-y divide-border overflow-y-auto text-sm" tabIndex={0}>
-            {v.calls.map((c) => (
-              <li key={c.id} className="py-1.5">
-                <div className="flex gap-2 text-xs text-muted"><span>{monthDay(c.date)} · FW{c.fw}</span><span>{c.driver}</span>{ds.tags.get(c.id) && <span className="rounded bg-surface-2 px-1.5">{themeName(ds.tags.get(c.id)!.primary)}</span>}</div>
-                <RedactedText recordId={c.id} field="notes" text={c.notes} className="text-xs" />
-              </li>
-            ))}
-          </ul>
-        )}
       </Card>
     </Drawer>
   );

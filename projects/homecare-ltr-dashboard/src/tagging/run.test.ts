@@ -9,10 +9,8 @@ describe('tagging runner', () => {
     const db = new HomeCareDB('run-test');
     await loadDemoData(db);
     const all = await db.tags.toArray();
-    expect(all.length).toBeGreaterThan(3000);
-    expect(all.every((t) => t.source === 'Rule')).toBe(true);
-    const assocIds = new Set((await db.calls.filter((c) => c.isAssociate).toArray()).map((c) => c.id));
-    expect(all.some((t) => assocIds.has(t.recordId))).toBe(false);
+    expect(all.length).toBeGreaterThan(2000);
+    expect(all.every((t) => t.source === 'Rule' && t.channel === 'survey')).toBe(true);
     const one = all.find((t) => t.fw === 40 && t.channel === 'survey')!;
     await db.tags.put({ ...one, primary: 'aging', source: 'Manual' });
     const r = await runRuleTagging({ fws: [40], database: db });

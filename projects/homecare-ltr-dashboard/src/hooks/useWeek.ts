@@ -10,16 +10,16 @@ export const REPORTING_WEEK_KEY = 'reportingWeek';
 
 /**
  * Default reporting week: the saved reporting week (set by demo load and call imports) → the latest completed week
- * whose data looks complete (has calls, or at least half the median weekly survey n) → last completed week.
+ * whose data looks complete (at least half the median weekly survey n) → last completed week.
  */
 export function pickDefaultWeek(
   weeks: number[], saved: number | undefined, lastCompleted: number,
-  counts: Record<number, { surveys: number; calls: number }> = {},
+  counts: Record<number, { surveys: number }> = {},
 ): number {
   if (saved && weeks.includes(saved)) return saved;
   const ns = Object.values(counts).map((c) => c.surveys).filter((n) => n > 0).sort((a, b) => a - b);
   const median = ns.length ? ns[Math.floor(ns.length / 2)] : 0;
-  const complete = (w: number) => !counts[w] || counts[w].calls > 0 || counts[w].surveys >= median / 2;
+  const complete = (w: number) => !counts[w] || counts[w].surveys >= median / 2;
   const eligible = weeks.filter((w) => w <= lastCompleted && complete(w));
   return eligible.length ? eligible[eligible.length - 1] : lastCompleted;
 }

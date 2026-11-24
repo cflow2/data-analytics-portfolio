@@ -7,7 +7,7 @@ import { pulseFacts, pulseScript } from '@/writing/pulse';
 import { verifyNumbers } from '@/writing/verify';
 import { addDays, dayName, monthDay, todayISO, type ISODate } from '@/lib/dates';
 import { copyText } from '@/data/export';
-import { splitCallNotes } from '@/tagging/engine';
+import { useSettings } from '@/state/settings';
 import { useUi } from '@/state/ui';
 import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, PageHeader, cx } from '@/components/ui/primitives';
@@ -19,9 +19,11 @@ export function DailyPulse() {
   const sc = SCREENS.find((x) => x.path === '/pulse')!;
   const { data: ds, loading, error } = useDataset();
   const presentation = useUi((s) => s.presentation);
-  // Default: the day after the latest loaded call (so "yesterday" has data), capped at today.
+  const benchmark = useSettings((s) => s.benchmark);
+  const fyStart = useSettings((s) => s.fyStart);
+  // Default: the day after the latest survey (so "yesterday" has data), capped at today.
   const defaultDate = useMemo(() => {
-    const latest = ds?.calls.reduce<ISODate | null>((m, c) => (!m || c.date > m ? c.date : m), null);
+    const latest = ds?.surveys.reduce<ISODate | null>((m, c) => (!m || c.date > m ? c.date : m), null);
     const t = todayISO();
     return latest ? (addDays(latest, 1) < t ? addDays(latest, 1) : t) : t;
   }, [ds]);
@@ -32,11 +34,12 @@ export function DailyPulse() {
   const [copied, setCopied] = useState(false);
   useEffect(() => { if (!big) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setBig(false); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [big]);
 
-  const f = useMemo(() => (ds ? pulseFacts(ds, d) : null), [ds, d]);
+  const f = useMemo(() => (ds ? pulseFacts(ds, d, benchmark, fyStart) : null), [ds, d, benchmark, fyStart]);
   if (!ds || !f) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading} error={error} empty={false}>{null}</PageGate></>;
   const generated = pulseScript(f);
   const script = saved.data ?? generated;
   const bad = verifyNumbers(script, f.numbers, [0, 6, 7, 8, 9, 10]).filter((h) => !h.ok);
+  const w = f.wtd;
   const words = script.split(/\s+/).filter(Boolean).length;
 
   return (
@@ -50,14 +53,13 @@ export function DailyPulse() {
         <div className="space-y-3">
           <p className="text-sm text-muted">Covering {f.periodLabel}.</p>
           <div className="grid grid-cols-4 gap-3">
-            <Card title={`Calls · ${f.calls.length}`}>
-              <p className="text-xs text-muted">+{f.associateCalls} associate/store help-desk calls (not VOC)</p>
-              <h3 className="mt-2 text-xs font-medium text-muted">Top drivers</h3>
-              <ul className="text-sm tnum">{f.topDrivers.map((x) => <li key={x.key} className="flex justify-between gap-2"><span className="truncate">{x.key}</span><span>{x.count}</span></li>)}</ul>
-              {f.topThemes.length > 0 && <><h3 className="mt-2 text-xs font-medium text-muted">Top themes</h3>
+            <Card title={`Surveys · ${f.surveys.length}`}>
+              <p className="text-sm tnum">{f.period.pct === null ? '—' : `${f.period.pct.toFixed(1)}% scored 9–10`} <span className="text-xs text-muted">({f.period.promoters} of {f.period.n})</span></p>
+              <p className="text-xs text-muted">{f.comments} with a comment</p>
+              {f.topThemes.length > 0 && <><h3 className="mt-2 text-xs font-medium text-muted">Top comment themes</h3>
                 <ul className="text-sm tnum">{f.topThemes.map((x) => <li key={x.key} className="flex justify-between gap-2"><span className="truncate">{x.key}</span><span>{x.count}</span></li>)}</ul></>}
             </Card>
-            <Card title={`New detractors · ${f.detractors.length}`}>
+            <Card title={`Scored 0–8 · ${f.detractors.length}`}>
               {f.detractors.length === 0 ? <p className="text-sm text-muted">None.</p> : (
                 <ul className="max-h-56 space-y-1 overflow-y-auto text-sm tnum" tabIndex={0}>
                   {f.detractors.map(({ s, store, cause }) => <li key={s.id}><span className={cx('font-semibold', s.ltr! <= 6 && 'text-surveys')}>{s.ltr}</span> · {store}{cause && <span className="text-muted"> · {cause}</span>}</li>)}
@@ -67,15 +69,16 @@ export function DailyPulse() {
             <Card title={`Damage & safety · ${f.damage.length}`}>
               {f.damage.length === 0 ? <p className="text-sm text-muted">None.</p> : (
                 <ul className="max-h-56 space-y-1.5 overflow-y-auto text-sm" tabIndex={0}>
-                  {f.damage.map(({ c, store, escalated }) => (
-                    <li key={c.id}><div className="text-xs text-muted">Case {c.caseNo} · {store} · <span className={escalated ? 'text-grow' : 'text-surveys'}>{escalated ? 'escalated' : 'not escalated'}</span></div>
-                      <RedactedText recordId={c.id} field="notes" text={splitCallNotes(c.notes).reason} className="text-xs" /></li>
+                  {f.damage.map(({ s, store }) => (
+                    <li key={s.id}><div className="text-xs text-muted">Score {s.ltr} · {store}</div>
+                      <RedactedText recordId={s.id} field="comment" text={s.comment} className="text-xs" /></li>
                   ))}
                 </ul>
               )}
             </Card>
-            <Card title={`Cancellations · ${f.cancellations}`}>
-              <p className="text-sm">{f.exclusionCancels} driven by service exclusions</p>
+            <Card title={`FW${w.fw} so far`}>
+              <p className="text-sm tnum">{w.s.pct === null ? '—' : <><span className={cx('font-semibold', w.s.pct < f.benchmark && 'text-surveys')}>{w.s.pct.toFixed(1)}%</span> on {w.s.n} surveys</>}</p>
+              {w.s.n > 0 && <p className="text-xs text-muted tnum">{w.s.detractors} scored 0–8 · {w.allowed} allowed at {f.benchmark}</p>}
               <h3 className="mt-3 text-xs font-medium text-muted">One thing to watch</h3>
               <p className="text-sm font-medium">{f.watch}</p>
             </Card>

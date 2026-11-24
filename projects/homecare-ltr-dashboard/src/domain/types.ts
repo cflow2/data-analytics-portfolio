@@ -1,16 +1,14 @@
 import type { ISODate } from '@/lib/dates';
 
-export type Channel = 'survey' | 'call';
-export type ChannelFilter = 'surveys' | 'calls' | 'both';
+export type Channel = 'survey';
 export type Status = 'ACT' | 'WATCH' | 'GROW' | 'STABLE';
-export type Maturity = 'Emerging' | 'Repeated' | 'Corroborated' | 'Validated';
+export type Maturity = 'Emerging' | 'Repeated' | 'Persistent';
 export type Sentiment = 'Positive' | 'Negative' | 'Neutral';
-export type ContactType = 'Avoidable' | 'Deflectable' | 'Necessary';
 export type TagSource = 'AI' | 'Rule' | 'Manual' | 'Demo';
 export type FollowUpStatus = 'Documented' | 'Email only' | 'Missing';
 export type FileKind =
   | 'tracker' | 'medallia-responses' | 'medallia-analytics' | 'commentary'
-  | 'loyalty-cases' | 'followup' | 'store-map' | 'demo';
+  | 'followup' | 'store-map' | 'demo';
 
 export type AttributeKey =
   | 'value' | 'scheduling' | 'quality' | 'timeToAppt' | 'processPrior'
@@ -38,23 +36,6 @@ export interface SurveyRecord {
   attrs?: Partial<Record<AttributeKey, number>>;
   /** Medallia topic tags (“Category - Topic (Sentiment)”). Suggestions only, never used to set themes. */
   topics?: string[];
-  sourceFile: string;
-  redactionUncertain?: boolean;
-  demo?: boolean;
-}
-
-export interface CallRecord {
-  id: string;
-  fw: number;
-  date: ISODate;
-  driver: string;
-  driverNorm: string;
-  caseNo: string;
-  notes: string;
-  isAssociate: boolean;
-  storeNo?: string;
-  /** salted hash of a phone number found in the notes, never displayed */
-  phoneHash?: string;
   sourceFile: string;
   redactionUncertain?: boolean;
   demo?: boolean;
@@ -108,8 +89,6 @@ export interface ThemeTag {
   secondary: string[];
   subTag?: string;
   sentiment: Sentiment;
-  contactType?: ContactType;
-  cancellation?: boolean;
   escalate?: boolean;
   confidence: number;
   source: TagSource;
@@ -119,7 +98,7 @@ export interface ThemeTag {
 
 export interface OriginalText {
   recordId: string;
-  field: 'comment' | 'notes' | 'insights';
+  field: 'comment' | 'insights';
   text: string;
 }
 
@@ -146,17 +125,6 @@ export interface WeekMeta {
   checklist?: Partial<Record<'tagged' | 'reviewed' | 'slideExported', boolean>>;
 }
 
-export interface Signal {
-  id: string;
-  signal: string;
-  theme: string;
-  firstSeenFw: number;
-  owner?: string;
-  nextAction?: string;
-  notes?: string;
-  status: Status;
-  validated?: boolean;
-}
 
 export interface LeadershipQuestion {
   id: string;
@@ -167,11 +135,6 @@ export interface LeadershipQuestion {
   createdAt: string;
 }
 
-export interface Escalation {
-  callId: string;
-  status: 'New' | 'Escalated to Field Support' | 'Resolved';
-  updatedAt: string;
-}
 
 export interface KV<T = unknown> {
   key: string;

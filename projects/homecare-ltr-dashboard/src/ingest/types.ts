@@ -1,6 +1,6 @@
 import type { ISODate } from '@/lib/dates';
 import type {
-  AttributeWeekly, CallRecord, FileKind, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord,
+  AttributeWeekly, FileKind, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord,
 } from '@/domain/types';
 import type { Candidate, ColumnMapping } from './specs';
 import type { RedactionRule } from './redact';
@@ -14,13 +14,6 @@ export interface ValidationReport {
   dateRange?: [ISODate, ISODate];
   /** fiscal week → rows */
   weeks: Record<number, number>;
-  /** calls only: week the file was imported into, and rows outside it */
-  targetWeek?: number;
-  outsideWeek?: number;
-  /** calls: rows vs distinct Case #, exact duplicate rows collapsed */
-  duplicates?: { duplicateRows: number; repeatCaseRows: number; distinctCases: number };
-  driverMapping?: { original: string; normalized: string }[];
-  associateCalls?: number;
   /** tracker: Score (100/0) vs Likelihood to Recommend disagreements */
   scoreMismatches?: { id: string; ltr: number; score100: number }[];
   fwMismatches?: number;
@@ -53,7 +46,6 @@ export interface FollowUpCheck {
 export interface BuildResult {
   kind: FileKind;
   surveys: SurveyRecord[];
-  calls: CallRecord[];
   followups: FollowUpRecord[];
   stores: StoreRecord[];
   attributeWeekly: AttributeWeekly[];

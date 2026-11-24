@@ -16,8 +16,8 @@ const STATUS: Record<StagedFile['status'], { label: string; cls: string }> = {
   error: { label: 'Error', cls: 'bg-surveys-soft text-surveys' },
 };
 
-export function FileCard({ file, selectedWeek }: { file: StagedFile; selectedWeek?: number }) {
-  const { importOne, remove, setTarget, reparse } = useImports();
+export function FileCard({ file }: { file: StagedFile }) {
+  const { importOne, remove, reparse } = useImports();
   const [open, setOpen] = useState(false);
   const [mapping, setMapping] = useState(false);
   const p = file.parsed;
@@ -51,15 +51,6 @@ export function FileCard({ file, selectedWeek }: { file: StagedFile; selectedWee
           {file.previouslyImported && file.status === 'ready' && (
             <p className="mt-1 text-xs text-muted">This exact file was imported on {new Date(file.previouslyImported).toLocaleDateString()}. Importing again updates records; it won’t duplicate them.</p>
           )}
-          {file.status === 'ready' && c?.kind === 'loyalty-cases' && r && (
-            <label className="mt-2 flex items-center gap-2 text-xs">
-              <span className="text-muted">Import calls into</span>
-              <select value={file.targetWeek} onChange={(e) => setTarget(file.key, Number(e.target.value))} className="h-7 rounded-md border border-border bg-surface px-1.5 text-xs">
-                {weeks.map((w) => <option key={w} value={w}>FW{w} ({r.weeks[w]} rows){w === selectedWeek ? ' · selected week' : ''}</option>)}
-              </select>
-              {weeks.length > 1 && <span className="text-surveys">{weeks.filter((w) => w !== file.targetWeek).reduce((a, w) => a + r.weeks[w], 0)} rows dated outside FW{file.targetWeek} will be dropped</span>}
-            </label>
-          )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {file.status === 'ready' && <Button variant="primary" onClick={() => importOne(file.key)}>Import</Button>}
@@ -74,7 +65,7 @@ export function FileCard({ file, selectedWeek }: { file: StagedFile; selectedWee
       </div>
       {open && r && (
         <div className="mt-2 rounded-lg bg-surface-2 px-3 py-1">
-          <ValidationReportView report={r} selectedWeek={selectedWeek} />
+          <ValidationReportView report={r} />
           {file.status !== 'imported' && <p className="pb-1 text-xs text-muted">Preview before import. Duplicate and locked-week checks run on import.</p>}
         </div>
       )}

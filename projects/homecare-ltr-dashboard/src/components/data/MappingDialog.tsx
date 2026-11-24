@@ -12,7 +12,7 @@ export function MappingDialog({ file, onClose, onApply }: {
 }) {
   const p = file.parsed!;
   const cand = p.candidate;
-  const [kind, setKind] = useState<Candidate['kind']>(cand?.kind ?? 'loyalty-cases');
+  const [kind, setKind] = useState<Candidate['kind']>(cand?.kind ?? 'tracker');
   const [sheet, setSheet] = useState(cand?.sheet ?? p.sheets[0]);
   const [headerRow, setHeaderRow] = useState((cand?.headerIndex ?? 0) + 1);
   const [remember, setRemember] = useState(true);

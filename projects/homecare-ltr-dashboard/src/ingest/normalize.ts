@@ -23,11 +23,6 @@ export function cellText(v: unknown): string {
 }
 
 /** Case # values: trim whitespace and newlines; numeric cells lose any ".0". */
-export function cleanCaseNo(v: unknown): string {
-  if (typeof v === 'number') return String(Math.trunc(v));
-  return String(v ?? '').replace(/\s+/g, ' ').trim().replace(/^(\d+)\.0+$/, '$1');
-}
-
 const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
 
 function iso(y: number, m: number, d: number): ISODate | null {

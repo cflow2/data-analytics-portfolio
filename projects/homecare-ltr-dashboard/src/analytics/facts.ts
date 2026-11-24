@@ -7,10 +7,8 @@ import { REGIONS, regionSortKey } from '@/domain/geo';
 import { baseline, byWeek, groupByWeek, ltrSurveys, poolWeeks, weekOf, type GeoFilter } from './ltr';
 import { attributeScores, groupRange, lowest, rangeLabel, type AttributeScore } from './attributes';
 import { detractorRows, rootCauseMix, type DetractorRow } from './detractors';
-import { callKpis, themeMentions, type CallKpis, type ThemeCount } from './voc';
+import { themeMentions, type ThemeCount } from './voc';
 import { themeHistory, whatChanged, type ThemeChange } from './themes';
-import { countBy } from './calls';
-import { callOutcome } from '@/tagging/engine';
 
 export interface WeekFacts {
   fw: number;
@@ -28,18 +26,12 @@ export interface WeekFacts {
   mentions: ThemeCount[];
   mentionsPrior: ThemeCount[];
   changes: ThemeChange[];
-  calls: CallKpis;
-  callsPrior: CallKpis;
-  avoidable: number;
+  /** tagged survey comments this week */
   tagged: number;
   appointmentSubs: { key: string; count: number }[];
-  cancelDrivers: { key: string; count: number }[];
-  refundDisputes: number;
-  cancelOutcomes: { processed: number; notProcessed: number; refunds: { key: string; count: number }[] };
-  damageUnescalated: number;
-  topDrivers: { key: string; count: number }[];
+  /** damage/safety comments this week */
+  damage: number;
   hasSurveys: boolean;
-  hasCalls: boolean;
   /** every number in this object, for verification */
   numbers: number[];
 }
@@ -48,6 +40,12 @@ function collect(o: unknown, out: number[]) {
   if (typeof o === 'number' && Number.isFinite(o)) out.push(o);
   else if (Array.isArray(o)) o.forEach((x) => collect(x, out));
   else if (o && typeof o === 'object') Object.values(o).forEach((x) => collect(x, out));
+}
+
+function countBy<T>(xs: T[], key: (x: T) => string): { key: string; count: number }[] {
+  const m = new Map<string, number>();
+  for (const x of xs) m.set(key(x), (m.get(key(x)) ?? 0) + 1);
+  return [...m].map(([k, count]) => ({ key: k, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
 export function weekFacts(ds: Dataset, fw: number, benchmark: number, thresholds: SampleThresholds, geo: GeoFilter = { region: null, district: null, store: null }): WeekFacts {
@@ -61,11 +59,8 @@ export function weekFacts(ds: Dataset, fw: number, benchmark: number, thresholds
   const attrsFor = (w: number) => attributeScores(ltr.filter((s) => s.fw === w), ds.attributeWeekly.filter((a) => a.fw === w), geoFiltered);
   const attrs = attrsFor(fw);
   const dets = detractorRows(ws, ds.followups, ds.tags, ds.stores, todayISO());
-  const custIds = new Set(ds.calls.filter((c) => !c.isAssociate).map((c) => c.id));
-  const calls = ds.calls.filter((c) => c.fw === fw);
-  const customerTags = calls.filter((c) => !c.isAssociate).map((c) => ds.tags.get(c.id)).filter((t): t is NonNullable<typeof t> => !!t);
-  const h = themeHistory(ds.tagList, custIds);
-  const validated = new Set(ds.signals.filter((x) => x.validated).map((x) => x.theme));
+  const weekTags = ws.map((s) => ds.tags.get(s.id)).filter((t): t is NonNullable<typeof t> => !!t);
+  const h = themeHistory(ds.tagList);
   const f: Omit<WeekFacts, 'numbers'> = {
     fw, benchmark,
     ltr: { cur, prior: weekOf(weekly, fw - 1), avg4: baseline(weekly, fw, 'avg4').summary, fytd: poolWeeks(weekly, 1, fw) },
@@ -76,35 +71,20 @@ export function weekFacts(ds: Dataset, fw: number, benchmark: number, thresholds
     followUpDocumented: dets.filter((d) => d.followUp === 'Documented').length,
     attrs, attrsPrior: attrsFor(fw - 1), lowestAttr: lowest(attrs),
     ranges: { preVisit: rangeLabel(groupRange(attrs, 'Pre-visit')), inHome: rangeLabel(groupRange(attrs, 'In-home')), program: rangeLabel(groupRange(attrs, 'Program')) },
-    mentions: themeMentions(ds.tagList, fw, custIds),
-    mentionsPrior: themeMentions(ds.tagList, fw - 1, custIds),
-    changes: whatChanged(h, fw, (th) => validated.has(th)),
-    calls: callKpis(calls, ds.tags),
-    callsPrior: callKpis(ds.calls.filter((c) => c.fw === fw - 1), ds.tags),
-    avoidable: customerTags.filter((t) => t.contactType === 'Avoidable').length,
-    tagged: customerTags.length,
-    appointmentSubs: countBy(customerTags.filter((t) => t.primary === 'appointment'), (t) => t.subTag ?? '—'),
-    cancelDrivers: countBy(customerTags.filter((t) => t.cancellation), (t) => t.primary),
-    refundDisputes: customerTags.filter((t) => t.subTag === 'Refund dispute').length,
-    cancelOutcomes: (() => {
-      const outs = calls.filter((c) => !c.isAssociate && ds.tags.get(c.id)?.cancellation).map((c) => callOutcome(c.notes));
-      const processed = outs.filter((o) => o.cancellation === 'Processed').length;
-      return { processed, notProcessed: outs.length - processed, refunds: countBy(outs, (o) => o.refund) };
-    })(),
-    damageUnescalated: calls.filter((c) => { const t = ds.tags.get(c.id); const e = ds.escalations.get(c.id); return t && (t.primary === 'damage' || t.escalate) && (!e || e.status === 'New'); }).length,
-    topDrivers: countBy(calls.filter((c) => !c.isAssociate), (c) => c.driverNorm || c.driver).slice(0, 5),
+    mentions: themeMentions(ds.tagList, fw),
+    mentionsPrior: themeMentions(ds.tagList, fw - 1),
+    changes: whatChanged(h, fw),
+    tagged: weekTags.length,
+    appointmentSubs: countBy(weekTags.filter((t) => t.primary === 'appointment'), (t) => t.subTag ?? '—'),
+    damage: weekTags.filter((t) => t.primary === 'damage' || t.secondary.includes('damage')).length,
     hasSurveys: ws.length > 0,
-    hasCalls: calls.length > 0,
   };
   const numbers: number[] = [];
   collect(f, numbers);
   // derived shares that text commonly quotes
-  if (f.calls.cancellations) numbers.push((100 * f.calls.exclusionCancels) / f.calls.cancellations);
-  if (f.tagged) numbers.push((100 * f.avoidable) / f.tagged);
   if (cur.n) numbers.push((100 * cur.detractors) / cur.n);
   for (const r of [f.ltr.prior, f.ltr.avg4, f.ltr.fytd]) if (r.pct !== null && cur.pct !== null) numbers.push(cur.pct - r.pct, Math.abs(cur.pct - r.pct));
   if (cur.pct !== null) numbers.push(cur.pct - benchmark, Math.abs(cur.pct - benchmark));
-  for (const m of f.mentions) numbers.push(m.surveys + m.calls);
-  for (const c of f.changes) numbers.push(Math.abs(c.dCallsPrior), Math.abs(c.dSurveysPrior));
+  for (const c of f.changes) numbers.push(Math.abs(c.dPrior));
   return { ...f, numbers };
 }

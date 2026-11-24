@@ -9,15 +9,14 @@ import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AttributeKey, AttributeWeekly, CallRecord, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord, SurveySource,
+  AttributeKey, AttributeWeekly, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord, SurveySource,
 } from '@/domain/types';
 import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
-  cellText, cleanCaseNo, cleanComment, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
+  cellText, cleanComment, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
 import { ATTR_FIELDS, ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
-import { redact, extractPhones, knownNamesRule, type RedactionRule } from './redact';
-import { driverMapping, isAssociateDriver, normalizeDriver, storeFromNotes } from './drivers';
+import { redact, knownNamesRule, type RedactionRule } from './redact';
 import { classifyInsight } from './followup';
 import type { BuildResult, MedalliaRange, ParsedFile, ParseRequest, ValidationReport } from './types';
 
@@ -207,48 +206,6 @@ function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, 
     r.rowsKept++;
     out.push(rec);
   }
-  return out;
-}
-
-function buildCalls(ctx: Ctx, rows: unknown[][], map: Record<string, number>): CallRecord[] {
-  const out: CallRecord[] = [];
-  const seen = new Set<string>();
-  const r = ctx.report;
-  const drivers: string[] = [];
-  let duplicateRows = 0;
-  for (const row of rows) {
-    if (rowIsBlank(row) || noContent(row, map, ['caseNo', 'notes', 'driver'])) continue;
-    r.rowsRead++;
-    const dw = dateAndWeek(ctx, get(row, map, 'date'));
-    if (!dw) continue;
-    const caseNo = cleanCaseNo(get(row, map, 'caseNo'));
-    const driver = cellText(get(row, map, 'driver')).replace(/\s+/g, ' ');
-    const rawNotes = cellText(get(row, map, 'notes'));
-    if (!caseNo && !rawNotes) { drop(r, 'No Case # and no notes'); continue; }
-    const id = `call-${hashString(`${caseNo}|${dw.date}|${driver}|${rawNotes}`)}`;
-    if (seen.has(id)) { duplicateRows++; drop(r, 'Exact duplicate row'); continue; }
-    seen.add(id);
-    const driverNorm = normalizeDriver(driver);
-    drivers.push(driver);
-    const phones = extractPhones(rawNotes);
-    const { text, uncertain } = doRedact(ctx, id, 'notes', rawNotes);
-    const rec: CallRecord = {
-      id, fw: dw.fw, date: dw.date, driver, driverNorm, caseNo, notes: text,
-      isAssociate: isAssociateDriver(driverNorm), sourceFile: ctx.fileName,
-    };
-    const store = storeFromNotes(rawNotes);
-    if (store) rec.storeNo = store;
-    if (phones.length) rec.phoneHash = hashString(`${ctx.salt}|${phones[0]}`);
-    if (uncertain) rec.redactionUncertain = true;
-    trackDate(r, dw.date, dw.fw);
-    r.rowsKept++;
-    out.push(rec);
-  }
-  const customer = out.filter((c) => !c.isAssociate);
-  const distinct = new Set(customer.map((c) => c.caseNo)).size;
-  r.duplicates = { duplicateRows, repeatCaseRows: customer.length - distinct, distinctCases: distinct };
-  r.associateCalls = out.length - customer.length;
-  r.driverMapping = driverMapping(drivers);
   return out;
 }
 
@@ -538,7 +495,7 @@ export function parseFile(req: ParseRequest): ParsedFile {
           ...base,
           candidate: { kind: 'medallia-analytics', sheet: wide.sheet.name, headerIndex: wide.headerIndex, map: {}, missing: [], score: 99 },
           headers: (wide.sheet.rows[wide.headerIndex] ?? []).map(cellText),
-          build: { kind: 'medallia-analytics', surveys: [], calls: [], followups: [], stores: [], attributeWeekly: aw, originals: [], report, medalliaRange: range },
+          build: { kind: 'medallia-analytics', surveys: [], followups: [], stores: [], attributeWeekly: aw, originals: [], report, medalliaRange: range },
           ms: performance.now() - t0,
         };
       }
@@ -557,7 +514,7 @@ export function parseFile(req: ParseRequest): ParsedFile {
     const report = newReport(cand.kind);
     const ctx: Ctx = { fileName: req.name, fyStart: req.fyStart, rules: req.rules, salt: req.salt, originals: [], report };
     const body = sheet.rows.slice(cand.headerIndex + 1);
-    const result: BuildResult = { kind: cand.kind, surveys: [], calls: [], followups: [], stores: [], attributeWeekly: [], originals: ctx.originals, report };
+    const result: BuildResult = { kind: cand.kind, surveys: [], followups: [], stores: [], attributeWeekly: [], originals: ctx.originals, report };
     switch (cand.kind) {
       case 'tracker': {
         ctx.storeInfo = new Map();
@@ -602,7 +559,6 @@ export function parseFile(req: ParseRequest): ParsedFile {
       }
       case 'medallia-responses': result.surveys = buildSurveys(ctx, body, cand.map, 'medallia'); break;
       case 'commentary': result.surveys = buildSurveys(ctx, body, cand.map, 'commentary'); break;
-      case 'loyalty-cases': result.calls = buildCalls(ctx, body, cand.map); break;
       case 'followup': result.followups = buildFollowups(ctx, body, cand.map); break;
       case 'store-map': result.stores = buildStores(ctx, body, cand.map); break;
       case 'medallia-analytics': result.attributeWeekly = buildAnalyticsLong(ctx, body, cand.map); break;
@@ -612,13 +568,5 @@ export function parseFile(req: ParseRequest): ParsedFile {
   } catch (e) {
     return { ...base, error: `Could not read this file: ${(e as Error).message}`, ms: performance.now() - t0 };
   }
-}
-
-/** Calls are imported one fiscal week at a time. Default: the selected week if present, else the busiest week. */
-export function defaultTargetWeek(weeks: Record<number, number>, selected?: number): number | undefined {
-  const entries = Object.entries(weeks).map(([w, n]) => [Number(w), n] as const);
-  if (!entries.length) return undefined;
-  if (selected && weeks[selected]) return selected;
-  return entries.sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
 }
 

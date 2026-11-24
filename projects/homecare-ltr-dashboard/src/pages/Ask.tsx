@@ -33,13 +33,13 @@ export function Ask() {
   return (
     <>
       <PageHeader title={sc.title} subtitle={sc.subtitle} actions={turns.length > 0 && !presentation && <Button variant="ghost" onClick={clear}>Clear conversation</Button>} />
-      <PageGate screen={sc} loading={loading} error={error} empty={!!data && data.ds.surveys.length === 0 && data.ds.calls.length === 0} emptyTitle="Nothing is loaded yet">
+      <PageGate screen={sc} loading={loading} error={error} empty={!!data && data.ds.surveys.length === 0} emptyTitle="Nothing is loaded yet">
         {data && (
           <div className="mx-auto max-w-[920px] space-y-3">
             <p className="flex items-center gap-1.5 text-xs text-muted"><Icon name="lock" size={13} /> Answers are computed on this laptop from the loaded data, for {data.week.label.split(' · ')[0]}{data.geoFiltered ? ` · ${[data.filters.region, data.filters.district, data.filters.store].filter(Boolean).join(' › ')}` : ''} unless the question says otherwise. Nothing is sent anywhere.</p>
             {turns.length === 0 && (
               <Card>
-                <p className="text-sm text-muted">Ask about LTR, detractors, regions, stores, attributes, themes, calls or cancellations. Name weeks (“FW38”, “last 4 weeks”, “FYTD”), a region (“R5”), a store (“#1234”) or a theme (“exclusions”).</p>
+                <p className="text-sm text-muted">Ask about LTR, detractors, regions, stores, attributes or comment themes. Name weeks (“FW38”, “last 4 weeks”, “FYTD”), a region (“R5”), a store (“#1234”) or a theme (“exclusions”).</p>
               </Card>
             )}
             <ol className="space-y-3" aria-live="polite">
@@ -63,7 +63,7 @@ export function Ask() {
                     {!presentation && !t.a.notLoaded && (
                       <div className="mt-2 flex gap-1">
                         <Button variant="ghost" className="h-7 px-2 text-xs" onClick={async () => { await copyText(t.a.text.join('\n')); note('Answer copied'); }}>Copy answer</Button>
-                        <Button variant="ghost" className="h-7 px-2 text-xs" onClick={async () => { await addWbrNote(t.fw, `${t.q}: ${t.a.text.join(' ')}`); note(`Pinned to FW${t.fw} WBR notes`); }}>Pin to WBR notes</Button>
+                        <Button variant="ghost" className="h-7 px-2 text-xs" onClick={async () => { await addWbrNote(t.fw, `${t.q}: ${t.a.text.join(' ')}`); note(`Pinned to the FW${t.fw} LTR Slide notes`); }}>Add to slide notes</Button>
                       </div>
                     )}
                   </article>

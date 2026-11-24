@@ -7,6 +7,11 @@ import { useIsLocked } from '@/hooks/useLocked';
 import { usePhone } from '@/hooks/usePhone';
 import { useWeekData } from '@/data/useWeekData';
 import { useUi } from '@/state/ui';
+import { useSettings } from '@/state/settings';
+import { getWbrNotes, removeWbrNote } from '@/writing/notes';
+import { autoAnswer, openQuestionsFor } from '@/slide/questions';
+import { QuestionsLog } from '@/components/slide/QuestionsLog';
+import { Icon } from '@/components/ui/Icon';
 import { SCREENS } from '@/screens';
 import { DEFAULT_ANCHORS, getRegionConfig, DEFAULT_REGION_CONFIG } from '@/config/regions';
 import type { RegionMapAsset } from '@/ingest/regionMap';
@@ -53,6 +58,8 @@ export function LtrSlide() {
   const mapAsset = useLive(async () => ((await db.kv.get('regionMap'))?.value as RegionMapAsset | undefined) ?? null, []);
   const driverDefs = useLive(() => getDriverDefs(), []);
   const saved = useLive(() => (fw ? loadEdits(fw) : Promise.resolve(null)), [fw]);
+  const thresholds = useSettings((s) => s.thresholds);
+  const pinnedAsk = useLive(() => (fw ? getWbrNotes(fw) : Promise.resolve([] as string[])), [fw]);
   const ranges = useLive(async () => (await db.kv.where('key').startsWith('medalliaRange:').toArray()).map((r) => r.value as MedalliaRange), []);
   const [drawer, setDrawer] = useState<{ kind: 'region'; region: string } | { kind: 'low' } | { kind: 'info' } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -107,9 +114,11 @@ export function LtrSlide() {
       { id: 'low', label: 'Scored 0–8', value: `${m.cur.low08}`, color: m.overAllowance > 0 ? COLORS.red : COLORS.ink,
         sub: edits.showAllowance ? `allowed ${m.cur.allowed} at ${m.benchmark} · ${m.overAllowance > 0 ? `${m.overAllowance} over` : 'within'}` : `of ${m.cur.n} surveys`, tip: 'Show the surveys that scored 0–8' },
     ];
-    const notes = talkTrack(m, model.drivers, edits, model.ytd);
+    const open = openQuestionsFor(data.ds.questions, fw);
+    const questions = open.map((q) => ({ question: q.question, fw: q.fw, answer: autoAnswer(q.question, { ds: data.ds, fw, benchmark: data.benchmark, thresholds }) }));
+    const notes = talkTrack(m, model.drivers, edits, model.ytd, { questions, pinned: pinnedAsk.data ?? [] });
     return { box, centers, callouts, title, subtitle, kpis, notes };
-  }, [model, edits, data, asset, regionCfg, fw]);
+  }, [model, edits, data, asset, regionCfg, fw, thresholds, pinnedAsk.data]);
 
   if (!data || !model || !edits || !view) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading || saved.loading || cfg.loading} error={error} empty={!loading && !!data && !data.week.hasData} emptyTitle={`No surveys for FW${fw}`}>{null}</PageGate></>;
   const { m } = model;
@@ -234,6 +243,12 @@ export function LtrSlide() {
         {full && <FullScreenSlide onClose={() => setFull(false)}>{canvas(true)}</FullScreenSlide>}
 
         <div className="grid gap-3 xl:grid-cols-2">
+          <QuestionsLog fw={fw} open={openQuestionsFor(data.ds.questions, fw)} asked={data.ds.questions.filter((q) => q.fw === fw)} readOnly={locked} />
+          <Card title="Pinned from Ask" actions={<span className="text-xs text-muted">added to the Back pocket</span>}>
+            {(pinnedAsk.data ?? []).length === 0 ? <p className="text-sm text-muted">Nothing pinned. On Ask, use “Add to slide notes” to keep an answer here.</p> : (
+              <ul className="space-y-1 text-sm">{pinnedAsk.data!.map((x) => <li key={x} className="flex gap-2"><span className="flex-1">{x}</span><button type="button" className="text-calls" onClick={() => void removeWbrNote(fw, x)} aria-label="Remove pinned note"><Icon name="x" size={12} /></button></li>)}</ul>
+            )}
+          </Card>
           <Card title="Validation" actions={<span className="text-xs text-muted">Check before presenting</span>}>
             <ul className="space-y-1.5 text-sm">
               {model.checks.map((c) => (

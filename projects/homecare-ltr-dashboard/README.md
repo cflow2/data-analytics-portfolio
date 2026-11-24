@@ -1,12 +1,12 @@
 # HomeCare+ LTR & Customer Intelligence Dashboard
 
-A local, single-page analytics app for HomeCare+ LTR reporting, Voice of the Customer (Medallia survey comments) and Contact Center (Loyalty Case) analysis, the Wednesday WBR slide and the daily pulse.
+A local, single-page analytics app for HomeCare+ LTR reporting from surveys: LTR, detractors, attributes, Voice of the Customer (survey comments), the weekly LTR slide and the daily pulse. Contact-center calls are out of scope.
 
 - Runs entirely on your laptop. No server, no login, no AI, no telemetry, no CDNs; outbound network is blocked.
 - Data lives in this browser's IndexedDB. Export or import a JSON backup from **Data Manager**.
 - `npm run build` produces **one self-contained HTML file** (`dist/index.html`, ~2.7 MB). Double-click it to open it offline.
 
-> **Status:** all 7 build phases complete (phase 5 built without AI — see [No AI, no network](#no-ai-no-network)).
+> **Status:** all build phases complete (phase 5 built without AI — see [No AI, no network](#no-ai-no-network)). Contact-center calls, the WBR Builder and Cross-Channel were removed when the app moved to survey LTR only; opening the new version deletes any stored call data once (survey data is untouched).
 
 ## Quick start (on the work laptop)
 
@@ -20,10 +20,10 @@ Your data stays in the browser profile for `file://` pages. Replacing `index.htm
 
 | When | What | Where |
 |---|---|---|
-| **Daily, morning** | Pick today's date; read or copy the 60-second script (Monday covers the weekend). | **Daily Pulse** |
-| **Monday** | Upload the LTR Tracker, Medallia Responses export, Analytics report, Customer Commentary, all Loyalty Case files for the week (import calls into the fiscal week), the detractor follow-up file, and a Store→District CSV if stores show as Unmapped. Read each file's validation report. | **Data Manager** |
-| **Tuesday** | 1. Check **Command Center** alerts. 2. Clear the **Review Queue** (low-confidence tags, uncertain redaction; add phrases to the rules as you go). 3. Skim **VOC Themes** and **Contact Center**; pin one quote per theme; escalate damage calls. 4. Update the **Signal Register** on Cross-Channel. 5. Build the slide in **WBR Builder**: pick and order themes, edit lines (≤ 85 characters, numbers checked), resolve the pre-flight, download the .pptx. 6. Open **LTR Slide**: check the validation panel, confirm the six callouts and card text, add the RedVest shout-out, then download the .pptx (or PNG) and the talk track. | Several |
-| **Wednesday** | Present the slide (or use **Present** mode). Log every leadership question in the **WBR Builder → Leadership questions log**; next week's speaker notes open with them, answered from that week's data. | WBR Builder |
+| **Daily, morning** | Pick today's date; read or copy the 60-second script on the surveys that came in (Monday covers the weekend). | **Daily Pulse** |
+| **Monday** | Upload the LTR Tracker, Medallia Responses export, Analytics report, Customer Commentary, the detractor follow-up file, and a Store→District CSV if stores show as Unmapped. Read each file's validation report. | **Data Manager** |
+| **Tuesday** | 1. Check **Command Center** alerts. 2. Clear the **Review Queue** (low-confidence tags, uncertain redaction; add phrases to the rules as you go). 3. Skim **VOC Themes** and **Detractors**. 4. Open **LTR Slide**: check the validation panel, confirm the six callouts and card text, add the RedVest shout-out, then download the .pptx (or PNG) and the talk track. | Several |
+| **Wednesday** | Present the slide (or use **Present** mode). Log every leadership question in **LTR Slide → Leadership questions log**; next week's talk track opens with them, answered from that week's data. | LTR Slide |
 | **After the WBR** | Lock the week on **Data Manager** (read-only) and export a backup. | Data Manager |
 
 ## Setup (development)
@@ -31,12 +31,13 @@ Your data stays in the browser profile for `file://` pages. Replacing `index.htm
 ```bash
 npm install
 npm run dev        # http://localhost:5173
-npm test           # Vitest: rules, calendar, parsers, redaction, tagging, writing, Ask, WBR/PPTX (151+ tests)
+npm test           # Vitest: rules, calendar, parsers, redaction, tagging, writing, Ask, LTR slide (140+ tests)
 npm run lint
 npm run typecheck
 npm run build      # → dist/index.html (single file, works from file://)
 npm run e2e        # quality checklist against dist/index.html (needs Playwright + Chromium)
 npm run e2e:a11y   # axe accessibility audit, every screen, light + dark (needs Playwright)
+npm run e2e:phone  # every screen at iPhone size (needs Playwright)
 ```
 
 Requires Node 20+. The two `e2e` scripts need Playwright (`npm i -D playwright && npx playwright install chromium`, or `CHROMIUM=/path/to/chrome`); they aren't in `package.json` because the app itself doesn't need them.
@@ -54,9 +55,9 @@ Requires Node 20+. The two `e2e` scripts need Playwright (`npm i -D playwright &
 | District from the store→district mapping, never from Lowe's Market | `src/ingest/parse.ts` | `src/ingest/tracker.test.ts` |
 | Follow-up: Documented only when member contact is described; blank = Missing; voicemail = Documented | `src/ingest/followup.ts` | `src/ingest/specs.test.ts` |
 | Theme taxonomy, keyword rules, default status | **Settings → Theme taxonomy** (stored); defaults in `src/domain/taxonomy.ts` | `src/tagging/engine.test.ts` |
-| Primary-theme precedence, sub-tags, contact type, cancellation | `src/tagging/engine.ts` | `src/tagging/engine.test.ts` |
+| Primary-theme precedence, sub-tags | `src/tagging/engine.ts` | `src/tagging/engine.test.ts` |
 | Redaction rules | **Settings → Redaction rules**; defaults in `src/ingest/redact.ts` | `src/ingest/redact.test.ts` |
-| Evidence maturity (Emerging / Repeated / Corroborated / Validated, 4-week window) | `src/analytics/themes.ts` | `src/analytics/themes.test.ts` |
+| Theme pattern (Emerging 1 week / Repeated 2–3 / Persistent all 4, 4-week window) | `src/analytics/themes.ts` | `src/analytics/themes.test.ts` |
 
 **Changing a coded rule:** edit the file, update its test, run `npm test`, then `npm run build`. The LTR and detractor guard tests fail on purpose if either rule changes. Settings-based rules (benchmark, thresholds, FY start, taxonomy, redaction) change without a rebuild.
 
@@ -68,55 +69,48 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 |---|---|---|
 | LTR Tracker (`LTR_Tracker*.xlsx`) | sheet `Export Data`, header found on row 3 | ~330 columns from all Lowe's survey programs; uses Surveyid, Lowe's Region, Store # (+ `Store` for city/state), Date Only, Appointment ID, Likelihood to Recommend (col “Likelihood to Recommend”, which equals the HomeCare+ LTR question wherever both are filled), ` Score`, FW # and the HomeCare+ comment. **Attributes are never taken from the Tracker** (its similarly named columns belong to other programs). Also reads the hidden `Servicing Selling Stores` (store → district), `Detractors` (SM follow-up) and `Fiscal Calendar` (checked against the app's calendar) sheets; other sheets are not converted, which keeps a 20 MB Tracker to ~2–3 s. Formula-only rows are ignored. |
 | Medallia Responses export | header on row 2 | Adds comments and the nine attributes. Merged into the matching Tracker survey (by ID, appointment, or date+store+score); never counted in LTR. |
-| Medallia Analytics driver report (`Analytics - <timestamp>.xlsx`) | rows = measures, columns = days (`14 Sat` … `20 Fri`, `Total`, `Benchmark`) or weeks (`FW40`); a long `FW, Attribute, Top 2 Box %, n` layout also works | Day columns are dated from the export timestamp in the file name and rolled up to fiscal weeks weighted by each day's Sample Size (this reproduces Medallia's Total). Medallia labels map to the nine attributes (Project Value → Value for money, Ease of Process → Ease of process prior, Amount of Time… → Time to get an appointment, …). n = Sample Size. The LTR row is cross-checked against the Tracker; Benchmark is ignored. |
+| Medallia Analytics driver report (`Analytics - <timestamp>.xlsx`) | rows = measures, columns = days (`14 Sat` … `20 Fri`, `Total`, `Benchmark`), weeks (`FW40`) or months (`Nov 2026`); a long `FW, Attribute, Top 2 Box %, n` layout also works | Day columns are dated from the export timestamp in the file name and rolled up to fiscal weeks weighted by each day's Sample Size (this reproduces Medallia's Total). Medallia labels map to the nine attributes (Project Value → Value for money, Ease of Process → Ease of process prior, Amount of Time… → Time to get an appointment, …). n = Sample Size. The LTR row is cross-checked against the Tracker; Benchmark is ignored. |
 | Customer Commentary | header on row 2; `date, score, comment` | Fills comments on matching Tracker surveys. |
-| Loyalty Cases | `Call Date, Call Driver, Case #, Case Notes` | Any sheet name, real or text dates, Case # newlines trimmed. You choose the week to import into; rows dated outside it are dropped and counted. |
 | Detractor follow-up (`FW40.xlsx`, or the Tracker's `Detractors` tab) | `LL, Score, Comment, Store, SM, Insights, Region, FW, FQ, FP` (header on row 1) | Insights → **Documented** only when contact with the member is described (called, contacted, spoke, left a voicemail, “customer confirmed…”); emails, plans (“I will call…”, “store asked to contact…”) and internal reviews/coaching → **Email only**; blank → **Missing**; detractors absent from the file → **Missing**. Names in the SM column are redacted wherever they appear. FQ/FP are checked against the calendar. |
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
 
-Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, pins, notes, headline or WBR edits (exports still work; untagged records still get their first rule tags).
+Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, notes, headline or slide edits (exports still work; untagged records still get their first rule tags).
 
-Each import produces a **validation report**: rows read/kept/dropped and why, dates found vs the selected week, duplicate cases, Call Driver typo mapping, Score vs LTR disagreements, the Tracker non-promoter count vs the follow-up file (naming missing surveys), unmapped stores, and redaction counts.
+Each import produces a **validation report**: rows read/kept/dropped and why, dates and fiscal weeks found, Score vs LTR disagreements, the Tracker non-promoter count vs the follow-up file (naming missing surveys), unmapped stores, and redaction counts.
 
 **Source of truth:** LTR is computed only from Tracker rows (`Likelihood to Recommend`; the `Score` column is checked against it and disagreements are listed).
 
 ## Privacy
 
-- On import, comments, call notes and SM insights pass through a **redaction** step: emails, order numbers (12+ digits), US phone numbers, street addresses, names after `CX`, `Caller`, `Spoke with:`, `Name:`, `Mr/Mrs/Ms`, names after `Store Manager`/`SM`/`technician`/`associate`, “First Last” before an action verb (“… reviewed”, “… contacted”), every name listed in a follow-up file's SM column, and ~900 common US first names bundled locally (words that are also ordinary words — Will, Mark, May, Bill, Jack… — are excluded). Remaining capitalised words after “with/by/tech/associate” mark the record *uncertain* for the Review Queue. “No Comment”-style placeholders are treated as blank. Rules are editable in **Settings → Redaction rules** (with a test box).
+- On import, comments and SM insights pass through a **redaction** step: emails, order numbers (12+ digits), US phone numbers, street addresses, names after `CX`, `Caller`, `Spoke with:`, `Name:`, `Mr/Mrs/Ms`, names after `Store Manager`/`SM`/`technician`/`associate`, “First Last” before an action verb (“… reviewed”, “… contacted”), every name listed in a follow-up file's SM column, and ~900 common US first names bundled locally (words that are also ordinary words — Will, Mark, May, Bill, Jack… — are excluded). Remaining capitalised words after “with/by/tech/associate” mark the record *uncertain* for the Review Queue. “No Comment”-style placeholders are treated as blank. Rules are editable in **Settings → Redaction rules** (with a test box).
 - Original text is stored only in IndexedDB (`originals` table). The UI shows redacted text; "Show original" relocks after 60 s and is unavailable in Presentation mode.
 - Text where PII may remain (e.g. "spoke with bob jones") is flagged for the Review Queue.
-- Phone numbers are hashed with a per-install salt (for repeat-caller detection) and never displayed.
 - The JSON backup contains original text — keep it on the work laptop.
 
 ## Theme tagging (rules engine)
 
-Every survey comment and customer call is tagged on import (and on **Data Manager → Re-run tagging**) with one primary theme, up to 3 secondary themes, sentiment and a confidence; calls also get sub-tag, contact type (Avoidable / Deflectable / Necessary), cancellation and escalate flags. Tags show their source: **Rule**, **AI** (phase 5) or **Manual**. Manual tags are never overwritten.
+Every survey comment is tagged on import (and on **Data Manager → Re-run tagging**) with one primary theme, up to 3 secondary themes, a sub-tag where one applies, sentiment, a confidence, and a damage/safety flag. Tags show their source: **Rule**, **AI** (phase 5) or **Manual**. Manual tags are never overwritten.
 
 - Keyword rules live in **Settings → Theme taxonomy** (phrases, `word*`, `/regex/`; single words also match plurals), with a test box.
 - Primary precedence: safety/damage > failed experience > service demand > specific praise > general praise. Positive mentions of scheduling or value are general praise; associate praise vs concern is judged on the associate words.
-- Never inferred from the score, Medallia topic tags or blank comments (“No Comment” counts as blank). Associate/store help-desk calls are never tagged.
-- Calls are themed from *Problem / Reason for Calling* only; *Completed Actions* gives outcomes (cancellation processed vs requested, 30-day window, refund processed vs requested vs none).
-- A cancellation means the subscription (not an appointment auto-cancel); a cancellation whose reason mentions an exclusion is “Exclusion drove cancel”.
+- Never inferred from the score, Medallia topic tags or blank comments (“No Comment” counts as blank).
 - Confidence < 0.7 → **Review Queue** (keys 1–9 / Enter / S); overrides can add the deciding phrase to the rules.
-- Evidence maturity (last 4 weeks): Emerging = 1 week, Repeated = 2+ weeks, Corroborated = both channels, Validated = set in the Signal Register.
+- Theme pattern (last 4 weeks): Emerging = seen in 1 week, Repeated = 2–3 weeks, Persistent = all 4.
 
 On the demo data the rules reproduce every baseline exactly; on a real FY26 Tracker about 8% of comments land in the Review Queue.
 
-## WBR Builder and Daily Pulse
+## Daily Pulse and Presentation mode
 
-- **WBR Builder** drafts the “Customer Insights FWxx” slide from the week's data: subtitle with LTR and n, up to 6 theme rows (`Theme: X mentions · Y calls · Z surveys` + a one-line insight with a live 85-character counter), the detractor callout, the “Top VOC Mentions” stacked chart (surveys vs calls, sorted, y-axis rounded above the top bar) and a sources/n footnote. Drag or ▲/▼ to reorder; every line is editable and saved per week; numbers that don't match the data are flagged.
-- **Pre-flight** must pass (or be overridden with a reason) before export: line length, numbers verified, LTR % with n, PII scan of slide + notes, week's data loaded, calls cover Sat–Fri, Review Queue cleared, last week's questions answered.
-- **Exports:** one editable 16:9 .pptx (native text, native chart, speaker notes), slide text, chart data, chart PNG at 2×. A test unzips the .pptx and scans every part for unredacted text.
-- **Leadership questions log:** questions logged at a WBR open the next week's speaker notes (“Last week I was asked about…”), each answered from that week's data, until marked answered.
-- **Daily Pulse:** pick the meeting date (Monday covers the weekend); calls and top drivers, new detractors, damage/safety, cancellations, one thing to watch, and an editable ~60-second script with a large-type reading view.
+- **Daily Pulse:** pick the meeting date (Monday covers the weekend). It shows the surveys that came in (share of 9–10, comment themes), every 0–8 score with store and theme, comments that mention damage or safety, the fiscal week so far against 93 (0–8 count vs the allowance), one thing to watch, and an editable ~60-second script with a large-type reading view. Every number in the script is checked against the data.
+- **Leadership questions log** lives on **LTR Slide**: questions logged at a WBR open the next week's talk track (“Last week I was asked about…”), each answered from that week's data, until marked answered. Answers pinned from **Ask** go to the slide's Back pocket.
 - **Presentation mode** (nav → Present): hides navigation, filters, edit controls and “Show original”; larger type; ← → move between screens; Esc exits.
 
 ## No AI, no network
 
 There is no AI provider: the work laptop has no API key or approved gateway, so the AI layer in the brief was replaced by local equivalents.
 
-- **Ask** turns a question into filters (weeks, region/district/store, theme, channel, thresholds) and an intent (why LTR moved, regions below benchmark, cancellations, what's new, LTR, detractors, attributes, stores, themes, calls), computes the answer from the loaded data and shows a **Data used** panel. If the data isn't loaded it says so; unrecognised questions get examples, never a guess.
-- **Writing** (slide theme lines ≤ 85 characters, the LTR callout, what-changed summary, speaker notes) is generated from one `weekFacts` object, so every number comes from the data. A **number checker** flags any figure in edited text that doesn't match (percentages must match percentages).
+- **Ask** turns a question into filters (weeks, region/district/store, theme, thresholds) and an intent (why LTR moved, regions below benchmark, what's new, LTR, detractors, attributes, stores, comment themes), computes the answer from the loaded data and shows a **Data used** panel. If the data isn't loaded it says so; unrecognised questions get examples, never a guess.
+- **Writing** (the what-changed summary, the LTR slide talk track and the pulse script) is generated from the computed facts, so every number comes from the data. A **number checker** flags any figure in edited text that doesn't match (percentages must match percentages).
 - The page's content-security policy blocks all outbound connections (`connect-src 'self' data: blob:`).
 
 ## Known issue: SheetJS version
@@ -138,9 +132,9 @@ npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz && npm test && npm run
 
 ## Demo data
 
-**Data Manager → Demo source files** downloads 12 synthetic files shaped like the real exports (header on row 3, ~300 columns, mixed sheet names, text dates, newline Case #s, day-before rows, fake PII) to try the uploader end to end. Importing them reproduces the same baselines.
+**Data Manager → Demo source files** downloads 6 synthetic files shaped like the real exports (Tracker header on row 3 with ~300 columns, Medallia exports, commentary, follow-up file, store mapping, fake PII in a comment) to try the uploader end to end. Importing them reproduces the same baselines.
 
-**Data Manager → Load demo data** generates synthetic, clearly labelled DEMO records (seeded, deterministic) that reproduce the real baselines: FW40 LTR 94.7% on n=131 (7 detractors, 2 at 0–6), FYTD 93.1% on n=3,736, 340 calls / 309 cases (+36 associate/store), 41 cancellations (18 from exclusions) and so on. `src/demo/generate.test.ts` checks every baseline.
+**Data Manager → Load demo data** generates synthetic, clearly labelled DEMO records (seeded, deterministic) that reproduce the real baselines: FW40 LTR 94.7% on n=131 (7 detractors, 2 at 0–6), FYTD 93.1% on n=3,736, R5 and R27 below 93, Ease of scheduling the lowest attribute at 87.4%, and so on. `src/demo/generate.test.ts` checks every baseline.
 
 ## Project layout
 
@@ -148,9 +142,9 @@ npm i https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz && npm test && npm run
 src/
   lib/          dates, fiscal calendar, LTR rules, seeded RNG
   domain/       types, taxonomy, attributes, geography
-  tagging/      keyword rules engine, runner, taxonomy store, manual overrides, WBR pins
-  wbr/          slide draft, pre-flight checks, speaker notes, PPTX builder
-  writing/      rule-based slide lines, callout, what-changed, speaker notes; number verification
+  tagging/      keyword rules engine, runner, taxonomy store, manual overrides
+  slide/        LTR slide metrics, layout, map painting, talk track, PPTX builder, questions log
+  writing/      what-changed summary, daily pulse; number verification
   ask/          local question planner + answers (no AI)
   analytics/    LTR pooling, compare baselines, grains, attributes, detractors, theme mentions, headline (pure, tested)
   db/           Dexie schema, backup/restore, queries
@@ -194,25 +188,19 @@ Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `
 | Demo: FW40 LTR 94.7%, n=131, 7 detractors (2 at 0–6); FYTD 93.1% on 3,736 | ✅ | unit `demo/generate.test.ts`, `analytics/analytics.test.ts`; e2e (both "Load demo data" and importing the demo source files) |
 | `fiscalWeek` values, FW40 WBR Nov 11, month 10, Q4 | ✅ | unit `lib/fiscal.test.ts` |
 | LTR = 9–10 ÷ valid scores; detractor = 0–8; tests fail if changed | ✅ | unit `lib/ltr.test.ts` (guard tests) |
-| Every LTR % shows n (screens, tooltips, exports) | ✅ | `PctN`/KPI cards everywhere; CSV/XLSX add n columns; WBR pre-flight check “Every LTR % shows n” |
+| Every LTR % shows n (screens, tooltips, exports) | ✅ | `PctN`/KPI cards everywhere; CSV/XLSX add n columns; the LTR slide's drawers and Back pocket give exact % with n |
 | No colour where n < 5 | ✅ | `canColor` in heat tables, trend points, region multiples, attribute strip |
-| Calls outside the week excluded and counted | ✅ | unit `ingest/pipeline.test.ts`; e2e |
-| Associate/store calls never in VOC | ✅ | unit `tagging/engine.test.ts`, `analytics/themes.test.ts` |
-| Survey and call counts never blended into a rate; channel split shown | ✅ | `analytics/voc.ts`, butterfly/table/WBR formats; unit tests |
 | Detractors dated after Friday only in “Next week preview” | ✅ | Detractors screen (FW+1 box); counted only in their own week |
 | Tracker header on row 3 / ~300 columns; Loyalty files with mixed sheets, text dates, newline Case # | ✅ | unit `ingest/pipeline.test.ts`, `ingest/tracker.test.ts`; verified on a real FY26 Tracker |
 | Same file twice → no duplicates | ✅ | unit + e2e |
 | Renamed column → mapping dialog, remembered | ✅ | unit + e2e |
-| 10,000 surveys + 2,000 calls < 3 s without freezing | ✅ | browser: 0.73 s, longest frame gap 19 ms during parsing (worker); writing 12k records afterwards pauses ≤ 0.25 s |
+| 10,000 surveys < 3 s without freezing | ✅ | browser: 0.73 s, longest frame gap 19 ms during parsing (worker); writing 12k records afterwards pauses ≤ 0.25 s |
 | Redaction: CX/Caller/Spoke with:/Name:, phone formats, emails, order #s, addresses | ✅ | unit `ingest/redact.test.ts` (plus staff names, SM-column names, common first names) |
-| Presentation mode and every export contain no unredacted text | ✅ | unit `wbr/wbr.test.ts` unzips the PPTX and scans every part; e2e scans all presentation screens and the downloaded PPTX |
+| Presentation mode and every export contain no unredacted text | ✅ | e2e scans all presentation screens and unzips the downloaded LTR slide PPTX; the demo has a comment with a fake name and phone number to prove it |
 | AI payload only redacted text and aggregates | n/a | No AI layer (no access); outbound network blocked by CSP |
 | No network requests | ✅ | e2e (zero requests; outbound `fetch` blocked) |
 | AI: invalid JSON retry, number verification, “not in the loaded data” | ✅ / n/a | No AI; number verification applies to all generated and edited text (`writing/verify.test.ts`); Ask says “not in the loaded data” (`ask/ask.test.ts`) |
-| PPTX opens with editable text, native chart, speaker notes | ✅ | unit + e2e check the file structure (1 slide, chart XML, notes) — open it in PowerPoint once to confirm |
-| Theme lines > 85 characters flagged | ✅ | unit + e2e (export blocked) |
-| Speaker notes start with “Last week I was asked about…” when questions are open | ✅ | unit `wbr/wbr.test.ts` |
-| Pre-flight blocks export until passed or overridden with a reason | ✅ | unit + e2e |
+| PPTX opens with editable text, native charts, speaker notes | ✅ | e2e checks the LTR slide file (native combo + drivers charts, talk track) — open it in PowerPoint once to confirm |
 | Every screen: loading, empty (names the file), error state | ✅ | `PageGate` + route `ErrorBoundary`; e2e checks every empty state |
 | Keyboard navigation; Ctrl+K palette | ✅ | e2e (palette navigation, visible focus, focus moves to content on navigation); drag-reorder has ▲/▼ buttons; Review Queue keys |
 | LTR Slide: FW41 values (91, ▼4, −2, 6 of 14, 20 scored 0–8, allowed 15, 198/11/9, divisions 94/89/87, trend colours) | ✅ | unit `slide/ltrMetrics.test.ts`; also checked against the real Tracker 1123 |
@@ -232,8 +220,9 @@ Two colour tokens are a shade darker than the brief to pass WCAG AA as text on t
 | 1 Foundation | project, shell, routing, filter bar, theme, fiscal calendar, Dexie schema, demo data | ✅ |
 | 2 Ingestion | 7 parsers in a Web Worker, fuzzy headers, mapping dialog, redaction, validation report | ✅ |
 | 3 LTR core | Command Center, LTR Trends, Regional Drilldown, Detractors, Attributes | ✅ |
-| 4 VOC & calls | rules engine, VOC Themes, Contact Center, Cross-Channel, Signal Register, Review Queue | ✅ |
+| 4 VOC | rules engine, VOC Themes, Review Queue (Contact Center and Cross-Channel later removed) | ✅ |
 | 5 Writing & Ask (no AI) | rule-based writing, number verification, local Ask | ✅ |
-| 6 WBR & pulse | WBR Builder, questions log, PPTX export, Daily Pulse, Presentation mode | ✅ |
+| 6 Pulse | Daily Pulse, Presentation mode (the WBR Builder was later replaced by the LTR Slide) | ✅ |
 | 7 Hardening | accessibility (axe), performance, locked weeks read-only, error boundary, e2e checklist, docs | ✅ |
 | 8 LTR Slide | weekly LTR slide, Tracker map extraction, callouts, combo chart, PPTX/PNG/JSON, settings | ✅ |
+| 9 Surveys only | calls, WBR Builder and Cross-Channel removed; survey Daily Pulse; one-time cleanup of stored call data; phone layout | ✅ |

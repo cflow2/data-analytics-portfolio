@@ -9,7 +9,7 @@ export function KpiCard({ label, value, sub, delta, deltaUnit = 'pts', deltaDigi
   delta?: number | null;
   deltaUnit?: string;
   deltaDigits?: number;
-  /** true when a rise is bad (detractors, calls, cancellations) */
+  /** true when a rise is bad (e.g. detractors) */
   invert?: boolean;
   compareLabel?: string;
   n?: number;

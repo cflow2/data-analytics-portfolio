@@ -7,13 +7,8 @@ import { fiscalWeek } from '@/lib/fiscal';
 
 const d = generateDemoData();
 const surveysFw = (fw: number) => d.surveys.filter((s) => s.fw === fw);
-const customerCalls = (fw: number) => d.calls.filter((c) => c.fw === fw && !c.isAssociate);
-const callTags = (fw: number) => {
-  const ids = new Set(customerCalls(fw).map((c) => c.id));
-  return d.tags.filter((t) => ids.has(t.recordId));
-};
-const mentions = (fw: number, channel: 'survey' | 'call', theme: string) =>
-  d.tags.filter((t) => t.fw === fw && t.channel === channel && (t.primary === theme || t.secondary.includes(theme))).length;
+const mentions = (fw: number, theme: string) =>
+  d.tags.filter((t) => t.fw === fw && (t.primary === theme || t.secondary.includes(theme))).length;
 
 describe('demo data reproduces the real baselines', () => {
   it('is deterministic', () => {
@@ -24,13 +19,11 @@ describe('demo data reproduces the real baselines', () => {
 
   it('every record is labeled DEMO', () => {
     expect(d.surveys.every((s) => s.demo && s.id.startsWith('DEMO'))).toBe(true);
-    expect(d.calls.every((c) => c.demo && c.caseNo.startsWith('DEMO'))).toBe(true);
     expect(d.stores.every((s) => s.name.startsWith('DEMO'))).toBe(true);
   });
 
   it('survey dates match their fiscal week', () => {
     for (const s of d.surveys) expect(fiscalWeek(s.date)).toBe(s.fw);
-    for (const c of d.calls) expect(fiscalWeek(c.date)).toBe(c.fw);
   });
 
   it('FW40 LTR = 94.7% on n=131: 124 promoters, 7 detractors, 2 scored 0–6', () => {
@@ -74,51 +67,15 @@ describe('demo data reproduces the real baselines', () => {
     }
   });
 
-  it('FW40 calls: 340 calls / 309 cases + 36 associate/store calls', () => {
-    expect(customerCalls(40).length).toBe(340);
-    expect(new Set(customerCalls(40).map((c) => c.caseNo)).size).toBe(309);
-    expect(d.calls.filter((c) => c.fw === 40 && c.isAssociate).length).toBe(36);
-  });
-
-  it('FW40 call themes: appt 76 (30/19/12/11/4), exclusions 42, completion 22, damage 13', () => {
-    const t = callTags(40);
-    const sub = (s: string) => t.filter((x) => x.primary === 'appointment' && x.subTag === s).length;
-    expect(t.filter((x) => x.primary === 'appointment').length).toBe(76);
-    expect([sub('Online/app failure'), sub('No-show/missed'), sub('Auto-cancel'), sub('Cancelled by store/Lowe’s'), sub('Arrival-time request')]).toEqual([30, 19, 12, 11, 4]);
-    expect(t.filter((x) => x.primary === 'exclusions').length).toBe(42);
-    expect(t.filter((x) => x.primary === 'completion').length).toBe(22);
-    expect(t.filter((x) => x.primary === 'damage').length).toBe(13);
-  });
-
-  it('cancellations: FW40 41 / 18 from exclusions (44%); FW38 41 / 20', () => {
-    for (const [fw, total, excl] of [[40, 41, 18], [38, 41, 20]]) {
-      const c = callTags(fw).filter((x) => x.cancellation);
-      expect(c.length).toBe(total);
-      expect(c.filter((x) => x.primary === 'exclusions').length).toBe(excl);
-    }
-    expect(Math.round((18 / 41) * 100)).toBe(44);
-  });
-
-  it('FW38: 221 cases, exclusions 38, completion 9', () => {
-    expect(new Set(customerCalls(38).map((c) => c.caseNo)).size).toBe(221);
-    expect(callTags(38).filter((x) => x.primary === 'exclusions').length).toBe(38);
-    expect(callTags(38).filter((x) => x.primary === 'completion').length).toBe(9);
-  });
-
   it('FW40 survey mentions: Associate 72, Value 9 (7+/2−), Appointment 6, Exclusions 4, Completion 1', () => {
-    expect(mentions(40, 'survey', 'associate')).toBe(72);
-    expect(mentions(40, 'survey', 'value')).toBe(9);
-    const value = d.tags.filter((t) => t.fw === 40 && t.channel === 'survey' && t.primary === 'value');
+    expect(mentions(40, 'associate')).toBe(72);
+    expect(mentions(40, 'value')).toBe(9);
+    const value = d.tags.filter((t) => t.fw === 40 && t.primary === 'value');
     expect(value.filter((t) => t.sentiment === 'Positive').length).toBe(7);
     expect(value.filter((t) => t.sentiment === 'Negative').length).toBe(2);
-    expect(mentions(40, 'survey', 'appointment')).toBe(6);
-    expect(mentions(40, 'survey', 'exclusions')).toBe(4);
-    expect(mentions(40, 'survey', 'completion')).toBe(1);
-  });
-
-  it('associate/store help-desk calls carry no theme tags', () => {
-    const assocIds = new Set(d.calls.filter((c) => c.isAssociate).map((c) => c.id));
-    expect(d.tags.some((t) => assocIds.has(t.recordId))).toBe(false);
+    expect(mentions(40, 'appointment')).toBe(6);
+    expect(mentions(40, 'exclusions')).toBe(4);
+    expect(mentions(40, 'completion')).toBe(1);
   });
 
   it('FW40 follow-ups: 3 documented, 2 email only, 2 missing; FW41 next-week detractors exist', () => {

@@ -5,7 +5,7 @@ import { useWeekData } from '@/data/useWeekData';
 import { SCREENS } from '@/screens';
 import { baseline, deltaPts, groupByWeek, poolWeeks, weekOf } from '@/analytics/ltr';
 import { groupRange, lowest, rangeLabel } from '@/analytics/attributes';
-import { callKpis, themeMentions } from '@/analytics/voc';
+import { themeMentions } from '@/analytics/voc';
 import { detractorRows } from '@/analytics/detractors';
 import { ruleHeadline } from '@/analytics/headline';
 import { themeName } from '@/domain/taxonomy';
@@ -17,7 +17,7 @@ import { useUi } from '@/state/ui';
 import { useIsLocked } from '@/hooks/useLocked';
 import type { ValidationReport } from '@/ingest/types';
 import { KpiCard } from '@/components/ui/KpiCard';
-import { Butterfly } from '@/components/charts/Butterfly';
+import { ThemeBars } from '@/components/charts/ThemeBars';
 import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, PageHeader, cx } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
@@ -70,28 +70,27 @@ export function CommandCenter() {
     const base = baseline(weekly, fw, filters.compare);
     const fytd = poolWeeks(weekly, 1, fw);
     const fytdPrev = poolWeeks(weekly, 1, fw - 1);
-    const callsFor = (w: number) => ds.calls.filter((c) => c.fw === w);
-    const kFor = (w: number) => callKpis(callsFor(w), ds.tags);
-    const k = kFor(fw);
-    const kPrev = filters.compare === 'prior' ? kFor(fw - 1) : null;
-    const kAvg = (sel: (x: ReturnType<typeof kFor>) => number) => {
-      const ws = filters.compare === 'avg4' ? [fw - 4, fw - 3, fw - 2, fw - 1] : filters.compare === 'fytd' ? Array.from({ length: fw }, (_, i) => i + 1) : [fw - 1];
-      const vals = ws.filter((w) => w >= 1 && callsFor(w).length).map((w) => sel(kFor(w)));
-      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
-    };
     const low = lowest(attrs);
     const lowPrev = low ? data.attrsFor(fw - 1).find((a) => a.key === low.key) : undefined;
-    const customerIds = new Set(ds.calls.filter((c) => !c.isAssociate).map((c) => c.id));
-    const mentions = themeMentions(ds.tagList, fw, customerIds);
-    const callThemes = [...mentions].sort((a, b) => b.calls - a.calls);
+    const mentions = themeMentions(ds.tagList, fw);
     const dets = detractorRows(data.weekSurveys, ds.followups, ds.tags, ds.stores, todayISO());
     const regions = groupByWeek(data.weekSurveys, (x) => x.region);
     const below = [...regions].map(([r, mm]) => ({ r, s: weekOf(mm, fw) }))
       .filter((x) => x.s.n >= 10 && x.s.pct !== null && x.s.pct < benchmark).sort((a, b) => regionSortKey(a.r) - regionSortKey(b.r));
-    // damage / safety calls not yet escalated
-    const weekCalls = callsFor(fw).filter((c) => !c.isAssociate);
-    const damage = weekCalls.filter((c) => { const t = ds.tags.get(c.id); return t && (t.primary === 'damage' || t.escalate); });
-    const unescalated = damage.filter((c) => !ds.escalations.get(c.id) || ds.escalations.get(c.id)!.status === 'New');
+    // Detractor comment themes (0–8 with a comment)
+    const detThemes = new Map<string, number>();
+    for (const sv of data.weekSurveys) {
+      if (sv.ltr === null || sv.ltr > 8) continue;
+      const tg = ds.tags.get(sv.id);
+      if (tg && tg.primary !== 'other') detThemes.set(tg.primary, (detThemes.get(tg.primary) ?? 0) + 1);
+    }
+    const topDet = [...detThemes].sort((a, b) => b[1] - a[1])[0];
+    // damage / safety mentioned in a survey comment this week
+    const damage = data.weekSurveys.filter((sv) => { const tg = ds.tags.get(sv.id); return tg && (tg.primary === 'damage' || tg.escalate); });
+    const comments = data.weekSurveys.filter((sv) => sv.comment.trim()).length;
+    const regionsAll = [...regions].map(([, mm]) => weekOf(mm, fw)).filter((x) => x.n > 0);
+    const atOrAbove = regionsAll.filter((x) => x.pct !== null && x.pct >= benchmark).length;
+    const regionsPrev = [...groupByWeek(ltr.filter((x) => x.fw === fw - 1), (x) => x.region)].map(([, mm]) => weekOf(mm, fw - 1)).filter((x) => x.n > 0);
     // validation problems from the latest upload batch
     const latest = ds.files[0];
     const batch = latest ? ds.files.filter((f) => Math.abs(Date.parse(latest.importedAt) - Date.parse(f.importedAt)) < 3_600_000) : [];
@@ -103,10 +102,9 @@ export function CommandCenter() {
       for (const c of r.followupCheck ?? []) if (c.missing.length) problems.push(`${f.name}: ${c.missing.length} FW${c.fw} detractor(s) missing from the follow-up file`);
       if (r.unmappedStores?.length) problems.push(`${f.name}: ${r.unmappedStores.length} unmapped store(s)`);
       if (r.redactionUncertain) problems.push(`${f.name}: ${r.redactionUncertain} record(s) with uncertain redaction`);
-      if (r.outsideWeek) problems.push(`${f.name}: ${r.outsideWeek} call(s) dated outside FW${r.targetWeek} dropped`);
     }
     const alerts: Alert[] = [];
-    if (unescalated.length) alerts.push({ id: 'dmg', level: 'act', text: `${unescalated.length} damage/safety call${unescalated.length === 1 ? '' : 's'} not yet escalated to Field Support`, to: '/calls' });
+    if (damage.length) alerts.push({ id: 'dmg', level: 'act', text: `${damage.length} survey comment${damage.length === 1 ? '' : 's'} mention damage or safety`, to: '/detractors' });
     const notDoc = dets.filter((d) => d.followUp !== 'Documented');
     if (notDoc.length) alerts.push({ id: 'fu', level: 'act', text: `${notDoc.length} of ${dets.length} detractors without documented SM follow-up (${dets.filter((d) => d.overdue).length} past 48 hours)`, to: '/detractors' });
     for (const b of below) alerts.push({ id: `r${b.r}`, level: 'watch', text: `${b.r} below ${benchmark}%: ${b.s.pct!.toFixed(1)}% (n=${b.s.n})`, to: `/regions` });
@@ -117,37 +115,31 @@ export function CommandCenter() {
       tracker: data.weekSurveys.length > 0,
       medallia: data.weekSurveys.some((x) => x.attrs) || ds.surveys.some((x) => x.fw === fw && (x.source === 'medallia' || x.source === 'commentary')),
       analytics: ds.attributeWeekly.some((a) => a.fw === fw),
-      calls: weekCalls.length > 0,
       followup: ds.followups.some((f) => f.fw === fw),
     };
-    const vocIds = [...data.weekSurveys.filter((x) => x.comment).map((x) => x.id), ...weekCalls.map((c) => c.id)];
+    const vocIds = data.weekSurveys.filter((x) => x.comment).map((x) => x.id);
     const tagged = vocIds.length > 0 && vocIds.every((id) => ds.tags.has(id));
 
     return {
-      fw, cur, base, fytd, fytdPrev, k, kPrev, kAvg, low, lowPrev, sparkWeeks, mentions, callThemes, dets, alerts, meta, has, tagged,
+      fw, cur, base, fytd, fytdPrev, low, lowPrev, sparkWeeks, mentions, dets, alerts, meta, has, tagged, comments, atOrAbove, regionsN: regionsAll.length,
+      atOrAbovePrev: regionsPrev.filter((x) => x.pct !== null && x.pct >= benchmark).length, regionsPrevN: regionsPrev.length,
       ltrSpark: sparkWeeks.map((w) => weekOf(weekly, w).pct),
       ltrFaded: sparkWeeks.map((w) => !canColor(weekOf(weekly, w).n, thresholds)),
       fytdSpark: sparkWeeks.map((w) => poolWeeks(weekly, 1, w).pct),
       detSpark: sparkWeeks.map((w) => weekOf(weekly, w).detractors),
       lowSpark: low ? sparkWeeks.map((w) => data.attrsFor(w).find((a) => a.key === low.key)?.pct ?? null) : [],
-      callSpark: sparkWeeks.map((w) => (callsFor(w).length ? kFor(w).calls : null)),
-      cancelSpark: sparkWeeks.map((w) => (callsFor(w).length ? kFor(w).cancellations : null)),
-      exclSpark: sparkWeeks.map((w) => (callsFor(w).length ? kFor(w).exclusionCancelPct : null)),
+      commentSpark: sparkWeeks.map((w) => { const ws = ltr.filter((x) => x.fw === w); return ws.length ? (100 * ws.filter((x) => x.comment.trim()).length) / ws.length : null; }),
+      fuDoc: dets.filter((d) => d.followUp === 'Documented').length,
       headline: ruleHeadline({
         fw, cur, benchmark, lowest: low, inHome: rangeLabel(groupRange(attrs, 'In-home')), detractors0to6: cur.detractors0to6,
-        topCallTheme: callThemes[0]?.calls ? { name: themeName(callThemes[0].theme), calls: callThemes[0].calls } : undefined,
+        topDetractorTheme: topDet ? { name: themeName(topDet[0]), count: topDet[1] } : undefined,
       }),
       ltrN: ltr.length,
     };
   }, [data, thresholds]);
 
-  const empty = !!data && !!m && m.cur.n === 0 && m.k.calls === 0;
+  const empty = !!data && !!m && m.cur.n === 0;
   const cmpLabel = m?.base.label ?? '';
-  const callDelta = (cur: number | null, sel: (x: NonNullable<typeof m>['k']) => number) => {
-    if (!m || cur === null) return null;
-    const ref = m.kPrev ? (m.kPrev.calls ? sel(m.kPrev) : null) : m.kAvg(sel);
-    return ref === null ? null : cur - ref;
-  };
 
   return (
     <>
@@ -155,7 +147,7 @@ export function CommandCenter() {
       <PageGate screen={s} loading={loading} error={error} empty={empty} emptyTitle={data ? `No data loaded for FW${data.week.fw}` : undefined}>
         {data && m && (
           <div className="space-y-3">
-            {data.geoFiltered && <p className="text-xs text-muted">LTR, detractors and attributes are filtered to {[data.filters.region, data.filters.district, data.filters.store].filter(Boolean).join(' › ')}. Call KPIs are company-wide (most calls carry no store).</p>}
+            {data.geoFiltered && <p className="text-xs text-muted">Filtered to {[data.filters.region, data.filters.district, data.filters.store].filter(Boolean).join(' › ')}.</p>}
             <div className="grid grid-cols-4 gap-3">
               <KpiCard label={`LTR · FW${m.fw}`} value={m.cur.pct === null ? '—' : `${m.cur.pct.toFixed(1)}%`} n={m.cur.n}
                 delta={deltaPts(m.cur, m.base.summary)} compareLabel={`${cmpLabel} (n=${m.base.summary.n})`} spark={m.ltrSpark} sparkFaded={m.ltrFaded} />
@@ -170,15 +162,12 @@ export function CommandCenter() {
               <KpiCard label="Lowest attribute" value={m.low?.pct != null ? `${m.low.pct.toFixed(1)}%` : '—'} n={m.low?.n}
                 sub={m.low ? `${m.low.label}${m.low.nApprox ? ' · n = survey sample' : ''}` : 'Upload the Medallia Responses or Analytics file'}
                 delta={m.low && m.lowPrev?.pct != null && m.low.pct != null ? m.low.pct - m.lowPrev.pct : null} compareLabel={`FW${m.fw - 1}`} spark={m.lowSpark} />
-              <KpiCard label="Customer calls" value={m.k.calls ? m.k.calls.toLocaleString() : '—'}
-                sub={m.k.calls ? `${m.k.cases} distinct cases · +${m.k.associate} associate/store (not VOC)` : 'Upload Loyalty Case files'}
-                delta={callDelta(m.k.calls || null, (x) => x.calls)} deltaUnit="" deltaDigits={data.filters.compare === 'prior' ? 0 : 1} invert compareLabel={cmpLabel} spark={m.callSpark} />
-              <KpiCard label="Cancellations" value={m.k.tagged ? String(m.k.cancellations) : '—'}
-                sub={m.k.tagged ? 'Cancel requests/processed in call notes' : m.k.calls ? 'Run tagging on the Data Manager' : 'Upload Loyalty Case files'}
-                delta={m.k.tagged ? callDelta(m.k.cancellations, (x) => x.cancellations) : null} deltaUnit="" deltaDigits={data.filters.compare === 'prior' ? 0 : 1} invert compareLabel={cmpLabel} spark={m.cancelSpark} />
-              <KpiCard label="Exclusion-driven cancel %" value={m.k.exclusionCancelPct === null ? '—' : `${Math.round(m.k.exclusionCancelPct)}%`}
-                sub={m.k.cancellations ? `${m.k.exclusionCancels} of ${m.k.cancellations} cancellations` : undefined}
-                delta={m.k.exclusionCancelPct === null ? null : callDelta(m.k.exclusionCancelPct, (x) => x.exclusionCancelPct ?? 0)} deltaUnit="pts" invert compareLabel={cmpLabel} spark={m.exclSpark} />
+              <KpiCard label={`Regions ≥ ${data.benchmark}`} value={m.regionsN ? `${m.atOrAbove} of ${m.regionsN}` : '—'}
+                sub={m.regionsPrevN ? `FW${m.fw - 1}: ${m.atOrAbovePrev} of ${m.regionsPrevN}` : 'regions with surveys this week'} />
+              <KpiCard label="Surveys with a comment" value={m.cur.n ? `${Math.round((100 * m.comments) / m.cur.n)}%` : '—'}
+                sub={m.cur.n ? `${m.comments} of ${m.cur.n} surveys` : undefined} spark={m.commentSpark} />
+              <KpiCard label="Detractor follow-up" value={m.dets.length ? `${m.fuDoc} of ${m.dets.length}` : '—'}
+                sub={m.dets.length ? 'documented by the store (0–8)' : 'No detractors this week'} />
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -202,10 +191,10 @@ export function CommandCenter() {
               </Card>
               <div className="col-span-2">
                 {m.mentions.length ? (
-                  <Butterfly compact counts={m.mentions} channel={data.filters.channel} title={`Top VOC themes · FW${m.fw}`}
-                    actions={<Link to={{ pathname: '/cross', search }} className="mr-1 text-xs font-medium text-calls underline">Full view</Link>} />
+                  <ThemeBars compact counts={m.mentions} title={`Survey comment themes · FW${m.fw}`}
+                    actions={<Link to={{ pathname: '/voc', search }} className="mr-1 text-xs font-medium text-calls underline">Full view</Link>} />
                 ) : (
-                  <Card title="Top VOC themes (surveys vs calls)">
+                  <Card title="Survey comment themes">
                     <p className="text-sm text-muted">No theme tags for FW{m.fw} yet. Upload this week’s files (they’re tagged on import) or use “Re-run tagging” on the Data Manager.</p>
                   </Card>
                 )}
@@ -215,7 +204,7 @@ export function CommandCenter() {
             <Card title={`Week status · FW${m.fw}`}>
               <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm" aria-label="Weekly workflow checklist">
                 {([
-                  ['Tracker', m.has.tracker], ['Medallia', m.has.medallia], ['Analytics', m.has.analytics], ['Calls', m.has.calls], ['Follow-up', m.has.followup],
+                  ['Tracker', m.has.tracker], ['Medallia', m.has.medallia], ['Analytics', m.has.analytics], ['Follow-up', m.has.followup],
                   ['Tagged', m.tagged], ['Reviewed', !!m.meta?.checklist?.reviewed], ['Slide exported', !!m.meta?.checklist?.slideExported],
                 ] as [string, boolean][]).map(([label, done], i, arr) => (
                   <li key={label} className="flex items-center gap-2">

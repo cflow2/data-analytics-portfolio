@@ -15,7 +15,7 @@ import { RedactedText } from '@/components/data/RedactedText';
 import { SourceBadge } from '@/components/voc/TagEditor';
 
 type Kind = 'low-confidence' | 'redaction';
-interface Item { key: string; kind: Kind; recordId: string; channel: 'survey' | 'call' | 'followup' }
+interface Item { key: string; kind: Kind; recordId: string; channel: 'survey' | 'followup' }
 
 export function ReviewQueue() {
   const sc = SCREENS.find((x) => x.path === '/review')!;
@@ -35,14 +35,11 @@ export function ReviewQueue() {
     const { ds } = data;
     const inScope = (w: number) => scope === 'all' || w === fw;
     const out: Item[] = [];
-    const customer = new Set(ds.calls.filter((c) => !c.isAssociate).map((c) => c.id));
     for (const t of ds.tagList) {
       if (!inScope(t.fw) || t.reviewed || t.source === 'Manual' || t.confidence >= REVIEW_THRESHOLD) continue;
-      if (t.channel === 'call' && !customer.has(t.recordId)) continue;
       out.push({ key: `lc:${t.recordId}`, kind: 'low-confidence', recordId: t.recordId, channel: t.channel });
     }
     for (const s of ds.surveys) if (s.redactionUncertain && inScope(s.fw)) out.push({ key: `rd:${s.id}`, kind: 'redaction', recordId: s.id, channel: 'survey' });
-    for (const c of ds.calls) if (c.redactionUncertain && inScope(c.fw)) out.push({ key: `rd:${c.id}`, kind: 'redaction', recordId: c.id, channel: 'call' });
     for (const f of ds.followups) if (f.redactionUncertain && inScope(f.fw)) out.push({ key: `rd:${f.id}`, kind: 'redaction', recordId: f.id, channel: 'followup' });
     return out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'redaction' ? -1 : 1));
   }, [data, scope, fw]);
@@ -54,7 +51,6 @@ export function ReviewQueue() {
     if (!data || !item) return null;
     const { ds } = data;
     if (item.channel === 'survey') { const s = ds.surveys.find((x) => x.id === item.recordId); return s && { text: s.comment, field: 'comment' as const, fw: s.fw, meta: `Survey · FW${s.fw} · ${monthDay(s.date)} · ${storeLabel(s.storeNo, ds.stores)} · score ${s.ltr ?? '—'}` }; }
-    if (item.channel === 'call') { const c = ds.calls.find((x) => x.id === item.recordId); return c && { text: c.notes, field: 'notes' as const, fw: c.fw, meta: `Call · FW${c.fw} · ${monthDay(c.date)} · ${c.driver} · case ${c.caseNo}` }; }
     const f = ds.followups.find((x) => x.id === item.recordId); return f && { text: f.insights, field: 'insights' as const, fw: f.fw, meta: `SM follow-up · FW${f.fw} · ${monthDay(f.date)} · store ${f.storeNo}` };
   }, [data, item]);
   const tag: ThemeTag | undefined = item ? data?.ds.tags.get(item.recordId) : undefined;
@@ -80,7 +76,7 @@ export function ReviewQueue() {
     if (!item) return;
     if (item.kind === 'low-confidence' && tag) { try { await markReviewed(tag); } catch (e) { setMsg((e as Error).message); setTimeout(() => setMsg(null), 4000); return; } }
     if (item.kind === 'redaction') {
-      const table = item.channel === 'survey' ? db.surveys : item.channel === 'call' ? db.calls : db.followups;
+      const table = item.channel === 'survey' ? db.surveys : db.followups;
       await (table as typeof db.surveys).update(item.recordId, { redactionUncertain: false });
     }
     next(true);
@@ -173,7 +169,7 @@ export function ReviewQueue() {
                       <Button variant="primary" onClick={() => void accept()}>Looks fine (Enter)</Button>
                       {editText === null ? <Button onClick={() => setEditText(rec.text)}>Edit redaction</Button> : (
                         <Button onClick={async () => {
-                          const table = item.channel === 'survey' ? db.surveys : item.channel === 'call' ? db.calls : db.followups;
+                          const table = item.channel === 'survey' ? db.surveys : db.followups;
                           await (table as typeof db.surveys).update(item.recordId, { [rec.field]: editText, redactionUncertain: false } as never);
                           if (item.channel !== 'followup') await runRuleTagging({ fws: [rec.fw] });
                           setEditText(null); next(true);

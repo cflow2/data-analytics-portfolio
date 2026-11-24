@@ -26,8 +26,7 @@ export function Attributes() {
     const fw = data.week.fw;
     const weeks = Array.from({ length: STRIP_WEEKS }, (_, i) => fw - STRIP_WEEKS + 1 + i).filter((w) => w >= 1);
     const strip = weeks.map((w) => ({ w, scores: data.attrsFor(w) }));
-    const custIds = new Set(data.ds.calls.filter((c) => !c.isAssociate).map((c) => c.id));
-    const mentions = new Map(themeMentions(data.ds.tagList, fw, custIds).map((m) => [m.theme, m]));
+    const mentions = new Map(themeMentions(data.ds.tagList, fw).map((m) => [m.theme, m]));
     return { fw, weeks, strip, low: lowest(data.attrs), mentions };
   }, [data]);
 
@@ -110,7 +109,7 @@ export function Attributes() {
 
           <Card title={`Attribute ↔ theme cross-check · FW${v.fw}`}>
             <table className="w-full text-sm tnum">
-              <thead className="text-left text-xs text-muted"><tr><th className="py-1 font-medium">Attribute</th><th className="font-medium">Top-2-box</th><th className="font-medium">Related theme</th><th className="text-right font-medium">Survey mentions</th><th className="text-right font-medium">of which negative</th><th className="text-right font-medium">Call mentions</th></tr></thead>
+              <thead className="text-left text-xs text-muted"><tr><th className="py-1 font-medium">Attribute</th><th className="font-medium">Top-2-box</th><th className="font-medium">Related theme</th><th className="text-right font-medium">Survey mentions</th><th className="text-right font-medium">of which negative</th></tr></thead>
               <tbody>
                 {ordered.map((a) => {
                   const m = v.mentions.get(a.relatedTheme);
@@ -121,13 +120,12 @@ export function Attributes() {
                       <td>{themeName(a.relatedTheme)}</td>
                       <td className="text-right">{m?.surveys ?? 0}</td>
                       <td className="text-right">{m?.surveysNeg ?? 0}</td>
-                      <td className="text-right">{m?.calls ?? 0}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-            <p className="mt-2 text-xs text-muted">Survey and call mentions are separate counts and are never combined into one rate.</p>
+            <p className="mt-2 text-xs text-muted">Mentions are survey comments tagged with the related theme (primary or secondary).</p>
           </Card>
         </div>
       </PageGate>

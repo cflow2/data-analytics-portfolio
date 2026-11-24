@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
-import type { ChannelFilter } from '@/domain/types';
 
 export type CompareTo = 'prior' | 'avg4' | 'fytd';
 
@@ -10,23 +9,19 @@ export interface Filters {
   region: string | null;
   district: string | null;
   store: string | null;
-  channel: ChannelFilter;
 }
 
 const COMPARES: CompareTo[] = ['prior', 'avg4', 'fytd'];
-const CHANNELS: ChannelFilter[] = ['surveys', 'calls', 'both'];
 
 export function parseFilters(p: URLSearchParams): Filters {
   const fw = Number(p.get('fw'));
   const compare = p.get('cmp') as CompareTo;
-  const channel = p.get('ch') as ChannelFilter;
   return {
     fw: Number.isInteger(fw) && fw >= 1 && fw <= 53 ? fw : null,
     compare: COMPARES.includes(compare) ? compare : 'prior',
     region: p.get('region') || null,
     district: p.get('district') || null,
     store: p.get('store') || null,
-    channel: CHANNELS.includes(channel) ? channel : 'both',
   };
 }
 
@@ -41,7 +36,6 @@ export function serializeFilters(f: Partial<Filters>, base = new URLSearchParams
   if ('region' in f) set('region', f.region);
   if ('district' in f) set('district', f.district);
   if ('store' in f) set('store', f.store);
-  if ('channel' in f) set('ch', f.channel, 'both');
   return p;
 }
 

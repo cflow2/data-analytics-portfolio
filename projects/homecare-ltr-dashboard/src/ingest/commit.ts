@@ -56,7 +56,7 @@ function linkFollowups(fus: FollowUpRecord[], surveys: SurveyRecord[]) {
   }
 }
 
-export interface CommitOptions { targetWeek?: number; database?: HomeCareDB }
+export interface CommitOptions { database?: HomeCareDB }
 
 export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {}): Promise<ValidationReport> {
   const database = opts.database ?? defaultDb;
@@ -70,7 +70,7 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
   const touchedWeeks = new Set<number>();
   const surveyStoreNos = new Set<string>();
 
-  await database.transaction('rw', [database.surveys, database.calls, database.followups, database.stores, database.attributeWeekly, database.originals, database.files, database.weeks, database.tags], async () => {
+  await database.transaction('rw', [database.surveys, database.followups, database.stores, database.attributeWeekly, database.originals, database.files, database.weeks, database.tags], async () => {
     // ── surveys ──
     if (b.surveys.length) {
       const incoming = notLocked(b.surveys);
@@ -143,30 +143,6 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
       }
     }
 
-    // ── calls ──
-    if (b.calls.length) {
-      let calls = b.calls;
-      if (opts.targetWeek) {
-        report.targetWeek = opts.targetWeek;
-        report.outsideWeek = calls.filter((c) => c.fw !== opts.targetWeek).length;
-        if (report.outsideWeek) report.dropped[`Dated outside FW${opts.targetWeek}`] = report.outsideWeek;
-        calls = calls.filter((c) => c.fw === opts.targetWeek);
-        report.rowsKept = calls.length;
-        const keep = new Set(calls.map((c) => c.id));
-        originals = originals.filter((o) => keep.has(o.recordId));
-      }
-      calls = notLocked(calls);
-      const existing = await database.calls.bulkGet(calls.map((c) => c.id));
-      report.alreadyLoaded = existing.filter(Boolean).length;
-      // Recount duplicates for the kept rows.
-      const customer = calls.filter((c) => !c.isAssociate);
-      const distinct = new Set(customer.map((c) => c.caseNo)).size;
-      report.duplicates = { duplicateRows: report.duplicates?.duplicateRows ?? 0, repeatCaseRows: customer.length - distinct, distinctCases: distinct };
-      report.associateCalls = calls.length - customer.length;
-      await database.calls.bulkPut(calls);
-      calls.forEach((c) => touchedWeeks.add(c.fw));
-    }
-
     // ── follow-ups ──
     if (b.followups.length) {
       const fus = notLocked(b.followups);
@@ -223,12 +199,7 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
 
   if (b.regionMap) await database.kv.put({ key: 'regionMap', value: b.regionMap });
   if (b.medalliaRange) await database.kv.put({ key: `medalliaRange:${b.medalliaRange.id}`, value: { ...b.medalliaRange, importedAt: new Date().toISOString() } });
-  // The week calls were imported into becomes the reporting week (the default in the filter bar).
-  if (b.kind === 'loyalty-cases' && opts.targetWeek) {
-    const prev = (await database.kv.get('reportingWeek'))?.value as number | undefined;
-    if (!prev || opts.targetWeek >= prev) await database.kv.put({ key: 'reportingWeek', value: opts.targetWeek });
-  }
-  const weeks = Object.keys(report.weeks).map(Number).filter((w) => !opts.targetWeek || w === opts.targetWeek).sort((a, z) => a - z);
+  const weeks = Object.keys(report.weeks).map(Number).sort((a, z) => a - z);
   await database.files.put({
     id: parsed.fileId, name: parsed.name, kind: b.kind, importedAt: new Date().toISOString(),
     sheet: parsed.candidate?.sheet, headerRow: (parsed.candidate?.headerIndex ?? 0) + 1,
@@ -242,16 +213,14 @@ export async function setWeekLocked(fw: number, locked: boolean, database: HomeC
   await database.weeks.put({ ...(w ?? { fw }), fw, locked });
 }
 
-/** Delete every record dated in a fiscal week (surveys, calls, follow-ups, attributes, tags, originals). */
+/** Delete every record dated in a fiscal week (surveys, follow-ups, attributes, tags, originals). */
 export async function deleteWeek(fw: number, database: HomeCareDB = defaultDb): Promise<number> {
-  return database.transaction('rw', [database.surveys, database.calls, database.followups, database.attributeWeekly, database.tags, database.originals, database.weeks], async () => {
+  return database.transaction('rw', [database.surveys, database.followups, database.attributeWeekly, database.tags, database.originals, database.weeks], async () => {
     const ids = [
       ...(await database.surveys.where('fw').equals(fw).primaryKeys()),
-      ...(await database.calls.where('fw').equals(fw).primaryKeys()),
       ...(await database.followups.where('fw').equals(fw).primaryKeys()),
     ] as string[];
     await database.surveys.where('fw').equals(fw).delete();
-    await database.calls.where('fw').equals(fw).delete();
     await database.followups.where('fw').equals(fw).delete();
     await database.attributeWeekly.where('fw').equals(fw).delete();
     await database.tags.where('fw').equals(fw).delete();

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { generateDemoData } from '@/demo/generate';
 import { ltrSurveys, byWeek, baseline, periodSeries, poolWeeks, pool, groupByWeek, impact, deltaPts } from './ltr';
 import { attributeScores, lowest, groupRange, rangeLabel } from './attributes';
-import { themeMentions, callKpis } from './voc';
+import { themeMentions } from './voc';
 import { detractorRows, rootCauseMix, closedLoopText } from './detractors';
 import { ltrSummary } from '@/lib/ltr';
 
@@ -63,19 +63,12 @@ describe('attributes', () => {
   });
 });
 
-describe('VOC and calls', () => {
-  const custIds = new Set(d.calls.filter((c) => !c.isAssociate).map((c) => c.id));
-  it('mentions keep channels separate and exclude associate calls', () => {
-    const t = themeMentions(d.tags, 40, custIds);
-    const appt = t.find((x) => x.theme === 'appointment')!;
-    expect([appt.surveys, appt.calls]).toEqual([6, 76]);
+describe('VOC', () => {
+  it('survey mentions per theme with sentiment; “other” excluded', () => {
+    const t = themeMentions(d.tags, 40);
+    expect(t.find((x) => x.theme === 'appointment')!.surveys).toBe(6);
     expect(t.find((x) => x.theme === 'value')).toMatchObject({ surveys: 9, surveysPos: 7, surveysNeg: 2 });
     expect(t.find((x) => x.theme === 'other')).toBeUndefined();
-  });
-  it('call KPIs', () => {
-    const k = callKpis(d.calls.filter((c) => c.fw === 40), tagMap);
-    expect(k).toMatchObject({ calls: 340, cases: 309, associate: 36, cancellations: 41, exclusionCancels: 18 });
-    expect(Math.round(k.exclusionCancelPct!)).toBe(44);
   });
 });
 

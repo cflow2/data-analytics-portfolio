@@ -22,9 +22,12 @@ function regionSentence(r: RegionRow, why: string, categories: string[], benchma
   return `${r.region} came in at ${r.cur.display}${move}, ${status}. ${why[0]?.toUpperCase() ?? ''}${why.slice(1)}.${cat.length ? ` The comments point to ${list(cat.map((c) => CAT_PHRASE[c] ?? c.toLowerCase()))}.` : ''}${caution}`;
 }
 
-export function talkTrack(m: SlideMetrics, drivers: DriverValue[], e: SlideEdits, ytd?: YtdValue): { text: string; words: number; minutes: number } {
+export interface NotesExtras { questions?: { question: string; fw: number; answer: string }[]; pinned?: string[] }
+
+export function talkTrack(m: SlideMetrics, drivers: DriverValue[], e: SlideEdits, ytd?: YtdValue, extras: NotesExtras = {}): { text: string; words: number; minutes: number } {
   const { cur, prior, benchmark } = m;
   const lines: string[] = ['TALK TRACK'];
+  if (extras.questions?.length) lines.push(`Last week I was asked about… ${extras.questions.map((q) => `${q.question} (FW${q.fw}): ${q.answer}`).join(' ')}`);
 
   // 1. KPIs
   const below = m.regionsWithSurveys - m.regionsAtOrAbove;
@@ -78,6 +81,7 @@ export function talkTrack(m: SlideMetrics, drivers: DriverValue[], e: SlideEdits
   back.push(`• Divisions exact: ${m.divisions.map((d) => `${title(d.division)} ${pct1(d.cur)}% on ${d.cur.n} (FW${m.fw - 1} ${pct1(d.prior)}% on ${d.prior.n})`).join('; ')}.`);
   back.push('• LTR = share of 9–10 scores on the 0–10 question; whole numbers round half up from one decimal; colours use the unrounded value.');
   back.push('• Lowe\'s counts every 0–8 as a detractor for the trend; the cards use Medallia\'s 9–10 / 7–8 / 0–6 buckets.');
+  if (extras.pinned?.length) back.push(...extras.pinned.map((x) => `• ${x}`));
   const text = `${body}\n\n${back.join('\n')}`;
   return { text, words, minutes: words / WORDS_PER_MINUTE };
 }

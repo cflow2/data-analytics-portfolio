@@ -79,8 +79,7 @@ export function StatusPill({ status }: { status: Status }) {
 const MATURITY_STYLE: Record<Maturity, string> = {
   Emerging: 'border-border text-muted',
   Repeated: 'border-calls text-calls',
-  Corroborated: 'border-calls bg-calls-soft text-calls',
-  Validated: 'border-grow bg-grow-soft text-grow',
+  Persistent: 'border-calls bg-calls-soft text-calls',
 };
 export function MaturityBadge({ maturity }: { maturity: Maturity }) {
   return <span className={cx('inline-flex rounded-md border px-1.5 py-px text-[11px] font-medium', MATURITY_STYLE[maturity])}>{maturity}</span>;

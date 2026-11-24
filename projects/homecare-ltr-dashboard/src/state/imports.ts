@@ -3,7 +3,6 @@ import { db } from '@/db/db';
 import { parseInWorker } from '@/ingest/client';
 import { commitParsed } from '@/ingest/commit';
 import { runRuleTagging } from '@/tagging/run';
-import { defaultTargetWeek } from '@/ingest/parse';
 import { hashBytes } from '@/ingest/normalize';
 import type { ParsedFile, ParseRequest, ValidationReport } from '@/ingest/types';
 import type { Candidate, ColumnMapping } from '@/ingest/specs';
@@ -21,7 +20,6 @@ export interface StagedFile {
   buffer: ArrayBuffer;
   status: StageStatus;
   parsed?: ParsedFile;
-  targetWeek?: number;
   report?: ValidationReport;
   error?: string;
   previouslyImported?: string;
@@ -29,9 +27,8 @@ export interface StagedFile {
 
 interface ImportState {
   files: StagedFile[];
-  addFiles: (files: File[], selectedWeek?: number) => Promise<void>;
+  addFiles: (files: File[]) => Promise<void>;
   reparse: (key: string, force?: ParseRequest['force'], remember?: { kind: string; mapping: ColumnMapping }) => Promise<void>;
-  setTarget: (key: string, fw: number) => void;
   importOne: (key: string) => Promise<void>;
   importAll: () => Promise<void>;
   remove: (key: string) => void;
@@ -51,7 +48,6 @@ function statusFor(p: ParsedFile): StageStatus {
 
 export const useImports = create<ImportState>((set, get) => {
   const patch = (key: string, p: Partial<StagedFile>) => set((s) => ({ files: s.files.map((f) => (f.key === key ? { ...f, ...p } : f)) }));
-  let selected: number | undefined;
 
   const parse = async (key: string, force?: ParseRequest['force']) => {
     const f = get().files.find((x) => x.key === key);
@@ -61,15 +57,13 @@ export const useImports = create<ImportState>((set, get) => {
     const prev = await db.files.get(parsed.fileId);
     patch(key, {
       parsed, status: statusFor(parsed), error: parsed.error,
-      targetWeek: parsed.build?.kind === 'loyalty-cases' ? defaultTargetWeek(parsed.build.report.weeks, selected) : undefined,
       previouslyImported: prev?.importedAt,
     });
   };
 
   return {
     files: [],
-    addFiles: async (files, selectedWeek) => {
-      selected = selectedWeek;
+    addFiles: async (files) => {
       const staged: StagedFile[] = await Promise.all(files.map(async (file) => {
         const buffer = await file.arrayBuffer();
         return { key: `${file.name}:${file.size}:${file.lastModified}:${Math.random().toString(36).slice(2, 7)}`, name: file.name, size: file.size, buffer, status: 'parsing' as const };
@@ -82,16 +76,15 @@ export const useImports = create<ImportState>((set, get) => {
       if (remember) await rememberMapping(remember.kind, remember.mapping);
       await parse(key, force);
     },
-    setTarget: (key, fw) => patch(key, { targetWeek: fw }),
     importOne: async (key) => {
       const f = get().files.find((x) => x.key === key);
       if (!f?.parsed?.build) return;
       patch(key, { status: 'importing' });
       try {
-        const report = await commitParsed(f.parsed, { targetWeek: f.targetWeek });
+        const report = await commitParsed(f.parsed);
         // Tag the weeks this file touched with the keyword rules (Manual/AI tags are kept).
-        const fws = Object.keys(report.weeks).map(Number).filter((w) => !report.targetWeek || w === report.targetWeek);
-        if (['tracker', 'medallia-responses', 'commentary', 'loyalty-cases'].includes(report.kind) && fws.length) await runRuleTagging({ fws });
+        const fws = Object.keys(report.weeks).map(Number);
+        if (['tracker', 'medallia-responses', 'commentary'].includes(report.kind) && fws.length) await runRuleTagging({ fws });
         patch(key, { status: 'imported', report });
       } catch (e) {
         patch(key, { status: 'error', error: (e as Error).message });
@@ -99,7 +92,7 @@ export const useImports = create<ImportState>((set, get) => {
     },
     importAll: async () => {
       // Tracker first so other sources can merge into it; store maps last.
-      const order: Candidate['kind'][] = ['tracker', 'medallia-responses', 'commentary', 'medallia-analytics', 'loyalty-cases', 'followup', 'store-map'];
+      const order: Candidate['kind'][] = ['tracker', 'medallia-responses', 'commentary', 'medallia-analytics', 'followup', 'store-map'];
       const ready = get().files.filter((f) => f.status === 'ready')
         .sort((a, b) => order.indexOf(a.parsed!.candidate!.kind) - order.indexOf(b.parsed!.candidate!.kind));
       for (const f of ready) await get().importOne(f.key);

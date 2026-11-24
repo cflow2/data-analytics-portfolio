@@ -1,12 +1,11 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
-  SurveyRecord, CallRecord, FollowUpRecord, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
-  ImportedFile, WeekMeta, Signal, LeadershipQuestion, Escalation, KV,
+  SurveyRecord, FollowUpRecord, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
+  ImportedFile, WeekMeta, LeadershipQuestion, KV,
 } from '@/domain/types';
 
 export class HomeCareDB extends Dexie {
   surveys!: EntityTable<SurveyRecord, 'id'>;
-  calls!: EntityTable<CallRecord, 'id'>;
   followups!: EntityTable<FollowUpRecord, 'id'>;
   attributeWeekly!: EntityTable<AttributeWeekly, 'id'>;
   stores!: EntityTable<StoreRecord, 'storeNo'>;
@@ -15,9 +14,7 @@ export class HomeCareDB extends Dexie {
   originals!: Dexie.Table<OriginalText, [string, string]>;
   files!: EntityTable<ImportedFile, 'id'>;
   weeks!: EntityTable<WeekMeta, 'fw'>;
-  signals!: EntityTable<Signal, 'id'>;
   questions!: EntityTable<LeadershipQuestion, 'id'>;
-  escalations!: EntityTable<Escalation, 'callId'>;
   /** settings, column mappings, WBR drafts, AI cache, etc. */
   kv!: EntityTable<KV, 'key'>;
 
@@ -38,13 +35,23 @@ export class HomeCareDB extends Dexie {
       escalations: 'callId, status',
       kv: 'key',
     });
+    // v2: the app reports LTR from surveys only. Contact-center calls, their tags, original notes, escalations,
+    // the cross-channel signal register and Loyalty Cases file records are deleted once.
+    this.version(2).stores({ calls: null, escalations: null, signals: null }).upgrade(async (tx) => {
+      const callIds = (await tx.table('tags').where('channel').equals('call').primaryKeys()) as string[];
+      await tx.table('tags').where('channel').equals('call').delete();
+      if (callIds.length) await tx.table('originals').where('recordId').anyOf(callIds).delete();
+      await tx.table('originals').filter((o: { field: string }) => o.field === 'notes').delete();
+      await tx.table('files').where('kind').equals('loyalty-cases').delete();
+      await tx.table('kv').where('key').startsWith('wbr:').delete(); // WBR Builder drafts
+    });
   }
 }
 
 export const db = new HomeCareDB();
 
 export const DATA_TABLES = [
-  'surveys', 'calls', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
-  'weeks', 'signals', 'questions', 'escalations', 'kv',
+  'surveys', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
+  'weeks', 'questions', 'kv',
 ] as const;
 export type DataTable = (typeof DATA_TABLES)[number];

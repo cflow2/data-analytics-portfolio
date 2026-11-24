@@ -5,12 +5,10 @@ import { districtFor } from '@/analytics/ltr';
 import { maturity, themeHistory, weekOfTheme } from '@/analytics/themes';
 import { storeLabel, REGIONS } from '@/domain/geo';
 import { monthDay } from '@/lib/dates';
-import { togglePin } from '@/tagging/manual';
 import type { Sentiment, SurveyRecord, ThemeTag } from '@/domain/types';
-import { useUi } from '@/state/ui';
 import { DataTable, type Col } from '@/components/ui/DataTable';
 import { PageGate } from '@/components/ui/PageGate';
-import { Button, Card, Delta, MaturityBadge, PageHeader, Select, StatusPill, cx } from '@/components/ui/primitives';
+import { Card, Delta, MaturityBadge, PageHeader, Select, StatusPill, cx } from '@/components/ui/primitives';
 import { RedactedText } from '@/components/data/RedactedText';
 import { TagEditor } from '@/components/voc/TagEditor';
 
@@ -19,7 +17,6 @@ interface Row { s: SurveyRecord; tag?: ThemeTag }
 export function VocThemes() {
   const sc = SCREENS.find((x) => x.path === '/voc')!;
   const { data, loading, error } = useWeekData();
-  const presentation = useUi((x) => x.presentation);
   const [theme, setTheme] = useState('all');
   const [sentiment, setSentiment] = useState<'all' | Sentiment>('all');
   const [band, setBand] = useState<'all' | '0-6' | '7-8' | '9-10'>('all');
@@ -33,20 +30,16 @@ export function VocThemes() {
     const geoOk = (s: SurveyRecord) => (!geo.region || s.region === geo.region) && (!geo.district || districtFor(s.storeNo, ds.stores) === geo.district) && (!geo.store || s.storeNo === geo.store);
     const vocAll = ds.surveys.filter((s) => s.comment && geoOk(s));
     const ids = new Set(vocAll.map((s) => s.id));
-    const custIds = new Set(ds.calls.filter((c) => !c.isAssociate).map((c) => c.id));
-    const surveyTags = ds.tagList.filter((t) => t.channel === 'survey' && ids.has(t.recordId));
-    const h = themeHistory(surveyTags, custIds);
-    const hAll = themeHistory(ds.tagList.filter((t) => t.channel === 'call' || ids.has(t.recordId)), custIds); // for corroboration with calls
-    const validated = new Set(ds.signals.filter((x) => x.validated).map((x) => x.theme));
+    const h = themeHistory(ds.tagList.filter((t) => ids.has(t.recordId)));
     const rows: Row[] = vocAll.filter((s) => s.fw === fw).map((s) => ({ s, tag: ds.tags.get(s.id) }));
     const cards = ds.taxonomy.filter((t) => t.id !== 'other').map((t) => {
       const cur = weekOfTheme(h, t.id, fw);
       const prev = weekOfTheme(h, t.id, fw - 1);
-      return { def: t, cur, prev, calls: weekOfTheme(hAll, t.id, fw).calls, maturity: maturity(hAll, t.id, fw, validated.has(t.id)) };
+      return { def: t, cur, prev, maturity: maturity(h, t.id, fw) };
     }).sort((a, b) => b.cur.surveys - a.cur.surveys);
     const recent = (th: string) => vocAll.filter((s) => s.fw > fw - 4 && s.fw <= fw && (() => { const t = ds.tags.get(s.id); return t && (t.primary === th || t.secondary.includes(th)); })())
       .sort((a, b) => b.date.localeCompare(a.date));
-    return { fw, rows, cards, pins: ds.pins[fw] ?? {}, serviceAdd: recent('service-add'), aging: recent('aging'), untagged: rows.filter((r) => !r.tag).length };
+    return { fw, rows, cards, serviceAdd: recent('service-add'), aging: recent('aging'), untagged: rows.filter((r) => !r.tag).length };
   }, [data]);
 
   const filtered = useMemo(() => (v?.rows ?? []).filter(({ s, tag }) => {
@@ -64,7 +57,6 @@ export function VocThemes() {
   if (!data || !v) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading} error={error} empty={false}>{null}</PageGate></>;
   const { ds } = data;
   const tname = (id: string) => ds.taxonomy.find((t) => t.id === id)?.name ?? id;
-  const pinnedIds = new Set(Object.values(v.pins));
 
   const cols: Col<Row>[] = [
     { id: 'date', header: 'Date', value: (r) => r.s.date, cell: (r) => <span className="whitespace-nowrap">{monthDay(r.s.date)}</span>, width: 64 },
@@ -75,18 +67,6 @@ export function VocThemes() {
     { id: 'tags', header: 'Themes · sentiment', value: (r) => (r.tag ? [r.tag.primary, ...r.tag.secondary].map(tname).join(' + ') : 'Untagged'), width: 300,
       exportExtra: [{ header: 'Sentiment', value: (r) => r.tag?.sentiment ?? '' }, { header: 'Tag source', value: (r) => r.tag?.source ?? '' }],
       cell: (r) => <TagEditor recordId={r.s.id} channel="survey" fw={r.s.fw} tag={r.tag} taxonomy={ds.taxonomy} compact /> },
-    { id: 'pin', header: 'WBR', value: (r) => (pinnedIds.has(r.s.id) ? 'Pinned' : ''), width: 80, sortable: false,
-      cell: (r) => {
-        const th = r.tag?.primary;
-        if (!th || th === 'other') return <span className="text-xs text-muted">—</span>;
-        const pinned = v.pins[th] === r.s.id;
-        return presentation || ds.weeks.get(r.s.fw)?.locked ? (pinned ? <span className="text-xs">Pinned</span> : null) : (
-          <Button variant={pinned ? 'primary' : 'ghost'} className="h-7 px-2 text-xs" onClick={(e) => { e.stopPropagation(); void togglePin(v.fw, th, r.s.id); }}
-            title={pinned ? 'Unpin' : v.pins[th] ? `Replace the pinned ${tname(th)} quote` : `Pin as the ${tname(th)} quote for the WBR`}>
-            {pinned ? 'Pinned' : 'Pin'}
-          </Button>
-        );
-      } },
   ];
 
   return (
@@ -113,16 +93,14 @@ export function VocThemes() {
                 </div>
                 <div className="mt-1.5 flex items-center gap-2 text-xs text-muted">
                   {c.maturity ? <MaturityBadge maturity={c.maturity} /> : <span>Not seen</span>}
-                  <span>Calls: {c.calls}</span>
                 </div>
               </button>
             ))}
           </div>
 
-          <Card title={`Quote explorer · FW${v.fw}`} actions={<span className="text-xs text-muted">{Object.keys(v.pins).length} quote(s) pinned to the WBR (max 1 per theme) · {v.untagged} untagged</span>}>
+          <Card title={`Quote explorer · FW${v.fw}`} actions={<span className="text-xs text-muted">{v.untagged} untagged</span>}>
             <DataTable rows={filtered} columns={cols} getRowId={(r) => r.s.id} exportName={`VOC_quotes_FW${v.fw}`} maxHeight={620}
               initialSort={[{ id: 'score', desc: false }]} empty="No comments match these filters."
-              rowClassName={(r) => (pinnedIds.has(r.s.id) ? 'bg-calls-soft/40' : undefined)}
               toolbar={
                 <>
                   <Select label="Theme" value={theme} onChange={setTheme} options={[{ value: 'all', label: 'All themes' }, ...ds.taxonomy.map((t) => ({ value: t.id, label: t.name }))]} />

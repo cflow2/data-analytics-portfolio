@@ -87,15 +87,6 @@ export const SPECS: KindSpec[] = [
     ],
   },
   {
-    kind: 'loyalty-cases', label: 'Loyalty Cases (Contact Center)', fileHint: /loyalty[_ ]?cases?/i,
-    fields: [
-      { key: 'date', label: 'Call Date', required: true, aliases: ['call date', 'date', 'created date'] },
-      { key: 'driver', label: 'Call Driver', required: true, aliases: ['call driver', 'driver', 'call reason'] },
-      { key: 'caseNo', label: 'Case #', required: true, aliases: ['case #', 'case number', 'case no', 'case'] },
-      { key: 'notes', label: 'Case Notes', required: true, aliases: ['case notes', 'notes', 'case note'] },
-    ],
-  },
-  {
     kind: 'followup', label: 'Detractor follow-up file', fileHint: /^fw\s?\d+/i,
     fields: [
       { key: 'date', label: 'LL (date)', required: true, aliases: ['ll', 'date', 'survey date'] },

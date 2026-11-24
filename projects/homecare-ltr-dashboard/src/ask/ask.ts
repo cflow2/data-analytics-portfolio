@@ -7,15 +7,13 @@ import type { Dataset } from '@/data/dataset';
 import { weekFacts, type WeekFacts } from '@/analytics/facts';
 import { byWeek, districtFor, ltrSurveys, pool, weekOf, type GeoFilter } from '@/analytics/ltr';
 import { attributeScores, groupRange, lowest, rangeLabel } from '@/analytics/attributes';
-import { countBy } from '@/analytics/calls';
-import { callOutcome } from '@/tagging/engine';
 import { whatChangedSummary } from '@/writing/write';
 import { ATTRIBUTES } from '@/domain/attributes';
 import { REGIONS, normalizeRegion, storeLabel, UNMAPPED } from '@/domain/geo';
 import { canColor, ltrSummary, sampleFlag, SAMPLE_FLAG_LABEL, type LtrSummary, type SampleThresholds } from '@/lib/ltr';
 import type { Cell, TableData } from '@/data/export';
 
-export type Intent = 'why-ltr' | 'regions-below' | 'cancellations' | 'whats-new' | 'detractors' | 'attributes' | 'stores' | 'calls' | 'theme' | 'ltr' | 'unknown';
+export type Intent = 'why-ltr' | 'regions-below' | 'whats-new' | 'detractors' | 'attributes' | 'stores' | 'theme' | 'ltr' | 'unknown';
 
 export interface Plan {
   intent: Intent;
@@ -24,7 +22,6 @@ export interface Plan {
   geo: GeoFilter;
   theme?: string;
   attribute?: string;
-  channel: 'surveys' | 'calls' | 'both';
   threshold?: number;
   minN: number;
   notes: string[];
@@ -58,7 +55,7 @@ const THEME_WORDS: [RegExp, string][] = [
 
 export function plan(question: string, ctx: Pick<AskContext, 'fw' | 'benchmark' | 'geo'>): Plan {
   const q = question.toLowerCase().replace(/[’']/g, "'").replace(/≥/g, '>=').replace(/[–—]/g, '-');
-  const p: Plan = { intent: 'unknown', from: ctx.fw, to: ctx.fw, geo: { ...ctx.geo }, channel: 'both', minN: 10, notes: [] };
+  const p: Plan = { intent: 'unknown', from: ctx.fw, to: ctx.fw, geo: { ...ctx.geo }, minN: 10, notes: [] };
 
   // weeks
   let m: RegExpExecArray | null;
@@ -75,9 +72,7 @@ export function plan(question: string, ctx: Pick<AskContext, 'fw' | 'benchmark' 
   if ((m = /\bdistrict\s+([\w-]+)/.exec(q))) p.geo = { ...p.geo, district: m[1].toUpperCase() === 'UNMAPPED' ? UNMAPPED : m[1].toUpperCase(), store: null };
   if ((m = /\b(?:store\s*#?\s*|#)(\d{3,4})\b/.exec(q))) p.geo = { ...p.geo, store: m[1].padStart(4, '0') };
 
-  // channel, thresholds
-  if (/\bcalls?\b/.test(q) && !/\bsurveys?\b/.test(q)) p.channel = 'calls';
-  else if (/\bsurveys?|comments?\b/.test(q) && !/\bcalls?\b/.test(q)) p.channel = 'surveys';
+  // thresholds
   if ((m = /\b(?:below|under|less than|lower than)\s+(\d{2}(?:\.\d)?)\s*%?/.exec(q))) p.threshold = +m[1];
   if ((m = /\bn\s*(?:>=|>|of at least|at least|over|above)\s*(\d+)/.exec(q))) p.minN = +m[1];
 
@@ -88,13 +83,11 @@ export function plan(question: string, ctx: Pick<AskContext, 'fw' | 'benchmark' 
   // intent
   if (/\bwhy\b/.test(q) && /\b(ltr|score|lt r|recommend)\b/.test(q)) p.intent = 'why-ltr';
   else if (/\bregions?\b/.test(q) && (/\b(below|under|less than|lower than|miss(ed|ing)?)\b/.test(q) || /\bbenchmark\b/.test(q))) p.intent = 'regions-below';
-  else if (/\bcancel\w*/.test(q)) p.intent = 'cancellations';
   else if (/\b(new|changed?|different|moved)\b/.test(q) && /\b(vs|versus|than|since|last week|week over week|this week)\b/.test(q)) p.intent = 'whats-new';
   else if (/\bwhat'?s new\b|\bwhat changed\b/.test(q)) p.intent = 'whats-new';
   else if (/\b(detractors?|0-8|0-6|7-8|low scores?|who scored)\b/.test(q)) p.intent = 'detractors';
   else if (p.attribute || /\b(attributes?|drivers? of ltr|lowest (attribute|score))\b/.test(q)) p.intent = 'attributes';
   else if (/\bstores?\b/.test(q) && /\b(worst|lowest|bottom|best|top|highest|which)\b/.test(q) && !p.geo.store) p.intent = 'stores';
-  else if (p.channel === 'calls' && !p.theme) p.intent = 'calls';
   else if (p.theme) p.intent = 'theme';
   else if (/\b(ltr|likelihood|score|recommend|how did we do|how are we doing)\b/.test(q) || p.geo.store || p.geo.region) p.intent = 'ltr';
   return p;
@@ -110,23 +103,24 @@ const table = (columns: string[], rows: Cell[][]): TableData => ({ columns, rows
 /** 95% margin of error for a proportion, in points. */
 const margin = (s: LtrSummary) => (s.n && s.pct !== null ? 1.96 * Math.sqrt((s.pct / 100) * (1 - s.pct / 100) / s.n) * 100 : null);
 
-function loadedWeeks(ds: Dataset): { surveys: number[]; calls: number[] } {
-  return {
-    surveys: [...new Set(ds.surveys.map((s) => s.fw))].sort((a, b) => a - b),
-    calls: [...new Set(ds.calls.map((c) => c.fw))].sort((a, b) => a - b),
-  };
+function loadedWeeks(ds: Dataset): number[] {
+  return [...new Set(ds.surveys.map((s) => s.fw))].sort((a, b) => a - b);
+}
+function countBy<T>(xs: T[], key: (x: T) => string): { key: string; count: number }[] {
+  const m = new Map<string, number>();
+  for (const x of xs) m.set(key(x), (m.get(key(x)) ?? 0) + 1);
+  return [...m].map(([k, count]) => ({ key: k, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 const rangeText = (ws: number[]) => (ws.length ? `FW${ws[0]}–FW${ws[ws.length - 1]}` : 'none');
 
 function notLoaded(what: string, p: Plan, ds: Dataset): Answer {
-  const lw = loadedWeeks(ds);
-  return { text: [`${what} for ${weeksLabel(p)} is not in the loaded data.`, `Loaded: surveys ${rangeText(lw.surveys)}, calls ${rangeText(lw.calls)}.`], dataUsed: null, notLoaded: true };
+  return { text: [`${what} for ${weeksLabel(p)} is not in the loaded data.`, `Surveys loaded: ${rangeText(loadedWeeks(ds))}.`], dataUsed: null, notLoaded: true };
 }
 
 export const SUGGESTIONS = [
   'Why did LTR move this week?',
   'Which regions are below 93% with n ≥ 10?',
-  'What drove cancellations?',
+  'Who were the detractors this week?',
   "What's new vs last week?",
 ];
 
@@ -139,7 +133,6 @@ export function answer(question: string, ctx: AskContext): Answer {
   const ltr = ltrSurveys(ds.surveys, p.geo, ds.stores);
   const weekly = byWeek(ltr);
   const inRange = ltr.filter((s) => s.fw >= p.from && s.fw <= p.to);
-  const callsInRange = ds.calls.filter((c) => c.fw >= p.from && c.fw <= p.to);
   const facts = (fw: number): WeekFacts => weekFacts(ds, fw, benchmark, thresholds, p.geo);
   const tname = (id: string) => ds.taxonomy.find((t) => t.id === id)?.name ?? (id === 'untagged' ? 'Untagged' : id);
 
@@ -180,38 +173,17 @@ export function answer(question: string, ctx: AskContext): Answer {
       return { text: out, dataUsed: { filters: [...filters, `Threshold: ${threshold}%`, `Minimum n: ${p.minN}`], n: `n=${inRange.length}`, table: table(['Region', 'LTR %', 'n', 'Detractors'], rows.map((x) => [x.r, x.s.pct === null ? null : +x.s.pct.toFixed(1), x.s.n, x.s.detractors])) } };
     }
 
-    case 'cancellations': {
-      const cust = callsInRange.filter((c) => !c.isAssociate);
-      if (!cust.length) return notLoaded('Call data', p, ds);
-      const cancels = cust.filter((c) => ds.tags.get(c.id)?.cancellation);
-      if (!cancels.length) return { text: [`No cancellation calls are tagged in ${weeksLabel(p)} (${cust.length} customer calls).`], dataUsed: { filters, n: `${cust.length} calls`, table: table(['Calls'], [[cust.length]]) } };
-      const drivers = countBy(cancels, (c) => { const t = ds.tags.get(c.id)!; return `${tname(t.primary)}${t.subTag && t.subTag !== 'Exclusion drove cancel' ? ` · ${t.subTag}` : ''}`; });
-      const outs = cancels.map((c) => callOutcome(c.notes));
-      const processed = outs.filter((o) => o.cancellation === 'Processed').length;
-      const refunds = countBy(outs, (o) => o.refund);
-      const excl = cancels.filter((c) => ds.tags.get(c.id)!.primary === 'exclusions').length;
-      return {
-        text: [
-          `${cancels.length} cancellation calls in ${weeksLabel(p)} (of ${cust.length} customer calls): ${processed} processed, ${cancels.length - processed} requests not confirmed as processed.`,
-          `What drove them: ${drivers.map((d) => `${d.key} ${d.count}`).join(', ')}.`,
-          `Exclusions drove ${excl} of ${cancels.length} (${Math.round((100 * excl) / cancels.length)}%).`,
-          `Refund outcome: ${refunds.map((r) => `${r.key} ${r.count}`).join(', ')}.`,
-          'Counts are calls, not unique members.',
-        ],
-        dataUsed: { filters: [`Weeks: ${weeksLabel(p)}`, 'Geography: company-wide (calls rarely name a store)'], n: `${cancels.length} cancellation calls`, table: table(['Driver', 'Calls'], drivers.map((d) => [d.key, d.count])) },
-      };
-    }
-
     case 'whats-new': {
       const fw = p.to;
-      if (!weekOf(weekly, fw).n && !ds.calls.some((c) => c.fw === fw)) return notLoaded('Data', { ...p, from: fw, to: fw }, ds);
+      if (!weekOf(weekly, fw).n) return notLoaded('Data', { ...p, from: fw, to: fw }, ds);
       const f = facts(fw);
       const out = [whatChangedSummary(f, ds.taxonomy)];
-      const up = f.changes.filter((c) => c.maturityPrev && c.maturityNow && ['Emerging', 'Repeated', 'Corroborated', 'Validated'].indexOf(c.maturityNow) > ['Emerging', 'Repeated', 'Corroborated', 'Validated'].indexOf(c.maturityPrev));
-      if (up.length) out.push(`Moved up in evidence: ${up.map((c) => `${tname(c.theme)} (${c.maturityPrev} → ${c.maturityNow})`).join(', ')}.`);
-      const rows = [...f.changes].sort((a, b) => Math.abs(b.dCallsPrior) + Math.abs(b.dSurveysPrior) - Math.abs(a.dCallsPrior) - Math.abs(a.dSurveysPrior));
-      return { text: out, dataUsed: { filters: [`Weeks: FW${fw} vs FW${fw - 1}`, `Geography: ${geoLabel(p.geo, ds)} (calls company-wide)`], n: `n=${f.ltr.cur.n} surveys, ${f.calls.calls} calls`,
-        table: table(['Theme', `Surveys FW${fw}`, 'Δ surveys', `Calls FW${fw}`, 'Δ calls', 'Maturity'], rows.map((c) => [tname(c.theme), c.cur.surveys, c.dSurveysPrior, c.cur.calls, c.dCallsPrior, c.maturityNow ?? ''])) } };
+      const order = ['Emerging', 'Repeated', 'Persistent'];
+      const up = f.changes.filter((c) => c.maturityPrev && c.maturityNow && order.indexOf(c.maturityNow) > order.indexOf(c.maturityPrev));
+      if (up.length) out.push(`Becoming more established: ${up.map((c) => `${tname(c.theme)} (${c.maturityPrev} → ${c.maturityNow})`).join(', ')}.`);
+      const rows = [...f.changes].sort((a, b) => Math.abs(b.dPrior) - Math.abs(a.dPrior));
+      return { text: out, dataUsed: { filters: [`Weeks: FW${fw} vs FW${fw - 1}`, `Geography: ${geoLabel(p.geo, ds)}`], n: `n=${f.ltr.cur.n} surveys`,
+        table: table(['Theme', `Comments FW${fw}`, 'Δ vs prior week', 'Pattern'], rows.map((c) => [tname(c.theme), c.cur.surveys, c.dPrior, c.maturityNow ?? ''])) } };
     }
 
     case 'detractors': {
@@ -256,36 +228,18 @@ export function answer(question: string, ctx: AskContext): Answer {
         dataUsed: { filters: [`Weeks: FW${from}–FW${p.to}`, `Geography: ${geoLabel(p.geo, ds)}`, `Minimum n: ${thresholds.noTrendBelow}`], n: `${rows.length} stores`, table: table(['Store', 'District', 'LTR %', 'n', 'Detractors'], rows.slice(0, 25).map((x) => [storeLabel(x.no, ds.stores), districtFor(x.no, ds.stores), +x.s.pct!.toFixed(1), x.s.n, x.s.detractors])) } };
     }
 
-    case 'calls': {
-      if (!callsInRange.length) return notLoaded('Call data', p, ds);
-      const cust = callsInRange.filter((c) => !c.isAssociate);
-      const tags = cust.map((c) => ds.tags.get(c.id)).filter((t): t is NonNullable<typeof t> => !!t);
-      const themes = countBy(tags, (t) => t.primary);
-      const drivers = countBy(cust, (c) => c.driverNorm || c.driver).slice(0, 5);
-      const avoid = tags.filter((t) => t.contactType === 'Avoidable').length;
-      return { text: [
-        `${cust.length} customer calls (${new Set(cust.map((c) => c.caseNo)).size} distinct cases) in ${weeksLabel(p)}, plus ${callsInRange.length - cust.length} associate/store help-desk calls (not VOC).`,
-        `By theme: ${themes.slice(0, 6).map((t) => `${tname(t.key)} ${t.count}`).join(', ')}.`,
-        `Top drivers: ${drivers.map((d) => `${d.key} ${d.count}`).join(', ')}.`,
-        tags.length ? `Avoidable: ${avoid} of ${tags.length} (${Math.round((100 * avoid) / tags.length)}%).` : 'Calls are not tagged yet.',
-      ], dataUsed: { filters: [`Weeks: ${weeksLabel(p)}`, 'Geography: company-wide'], n: `${cust.length} calls`, table: table(['Theme', 'Calls'], themes.map((t) => [tname(t.key), t.count])) } };
-    }
-
     case 'theme': {
       const th = p.theme!;
-      const surveyTags = ds.tagList.filter((t) => t.channel === 'survey' && t.fw >= p.from && t.fw <= p.to && (t.primary === th || t.secondary.includes(th)));
       const geoIds = new Set(ds.surveys.filter((s) => (!p.geo.region || s.region === p.geo.region) && (!p.geo.store || s.storeNo === p.geo.store) && (!p.geo.district || districtFor(s.storeNo, ds.stores) === p.geo.district)).map((s) => s.id));
-      const st = surveyTags.filter((t) => geoIds.has(t.recordId));
-      const custIds = new Set(callsInRange.filter((c) => !c.isAssociate).map((c) => c.id));
-      const ct = ds.tagList.filter((t) => t.channel === 'call' && custIds.has(t.recordId) && (t.primary === th || t.secondary.includes(th)));
-      if (!st.length && !ct.length && !inRange.length && !callsInRange.length) return notLoaded('Data', p, ds);
-      const subs = countBy(ct.filter((t) => t.primary === th && t.subTag), (t) => t.subTag!);
-      const out = [`${tname(th)} in ${weeksLabel(p)}: ${st.length} survey mentions (${st.filter((t) => t.sentiment === 'Positive').length} positive, ${st.filter((t) => t.sentiment === 'Negative').length} negative) and ${ct.length} call mentions. Counted separately, never blended.`];
-      if (subs.length) out.push(`Call sub-tags: ${subs.map((s) => `${s.key} ${s.count}`).join(', ')}.`);
-      const cancels = ct.filter((t) => t.cancellation).length;
-      if (cancels) out.push(`${cancels} of these calls were cancellations.`);
-      if (p.geo.region || p.geo.store) out.push('Survey mentions follow the geography filter; calls are company-wide.');
-      return { text: out, dataUsed: { filters, n: `${st.length} survey + ${ct.length} call records`, table: table(['Channel', 'Mentions', 'Positive', 'Negative'], [['Surveys', st.length, st.filter((t) => t.sentiment === 'Positive').length, st.filter((t) => t.sentiment === 'Negative').length], ['Calls', ct.length, null, null]]) } };
+      const st = ds.tagList.filter((t) => t.channel === 'survey' && t.fw >= p.from && t.fw <= p.to && geoIds.has(t.recordId) && (t.primary === th || t.secondary.includes(th)));
+      if (!st.length && !inRange.length) return notLoaded('Data', p, ds);
+      const pos = st.filter((t) => t.sentiment === 'Positive').length, neg = st.filter((t) => t.sentiment === 'Negative').length;
+      const lowIds = new Set(inRange.filter((x) => x.ltr !== null && x.ltr <= 8).map((x) => x.id));
+      const inLow = st.filter((t) => lowIds.has(t.recordId)).length;
+      const subs = countBy(st.filter((t) => t.primary === th && t.subTag), (t) => t.subTag!);
+      const out = [`${tname(th)} in ${weeksLabel(p)}: ${st.length} survey comment${st.length === 1 ? '' : 's'} (${pos} positive, ${neg} negative); ${inLow} from surveys that scored 0–8.`];
+      if (subs.length) out.push(`Sub-tags: ${subs.map((x) => `${x.key} ${x.count}`).join(', ')}.`);
+      return { text: out, dataUsed: { filters, n: `${st.length} survey comments`, table: table(['Comments', 'Positive', 'Negative', 'Scored 0–8'], [[st.length, pos, neg, inLow]]) } };
     }
 
     case 'ltr': {
@@ -299,10 +253,9 @@ export function answer(question: string, ctx: AskContext): Answer {
     }
 
     default: {
-      const lw = loadedWeeks(ds);
       return { text: [
         'I can only answer from the loaded data, and I can’t match that question to it.',
-        `I can answer about LTR, detractors, regions, stores, attributes, themes, calls and cancellations (surveys loaded ${rangeText(lw.surveys)}, calls ${rangeText(lw.calls)}). Try “LTR for R5 last 4 weeks”, “Which stores are lowest since FW30?” or “How many exclusion calls in FW40?”.`,
+        `I can answer about LTR, detractors, regions, stores, attributes and comment themes (surveys loaded ${rangeText(loadedWeeks(ds))}). Try “LTR for R5 last 4 weeks”, “Which stores are lowest since FW30?” or “How many exclusion comments in FW40?”.`,
       ], dataUsed: null, notLoaded: true };
     }
   }
