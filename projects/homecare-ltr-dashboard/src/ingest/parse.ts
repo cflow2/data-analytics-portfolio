@@ -19,7 +19,7 @@ import { ATTR_FIELDS, ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFiel
 import { redact, extractPhones, knownNamesRule, type RedactionRule } from './redact';
 import { driverMapping, isAssociateDriver, normalizeDriver, storeFromNotes } from './drivers';
 import { classifyInsight } from './followup';
-import type { BuildResult, ParsedFile, ParseRequest, ValidationReport } from './types';
+import type { BuildResult, MedalliaRange, ParsedFile, ParseRequest, ValidationReport } from './types';
 
 export interface Sheet { name: string; rows: unknown[][] }
 
@@ -350,9 +350,11 @@ function buildAnalyticsLong(ctx: Ctx, rows: unknown[][], map: Record<string, num
 
 // ───────── Medallia Analytics (wide): one row per measure, one column per day or week ─────────
 const DAY_HEADER = /^\s*(\d{1,2})\s+(sat|sun|mon|tue|wed|thu|fri)[a-z]*\.?\s*$/i;
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_HEADER = /^\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s,'-]+(\d{4}|\d{2})\s*$/i;
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
-interface PeriodCol { col: number; fw: number; date?: ISODate }
+interface PeriodCol { col: number; fw: number; date?: ISODate; /** month columns span several weeks: used for the range total only */ end?: ISODate; month?: boolean }
 interface WideLayout {
   sheet: Sheet;
   headerIndex: number;
@@ -396,6 +398,15 @@ export function resolvePeriodColumns(header: unknown[], refDate: ISODate, fyStar
       if (d) { periods.push({ col, fw: fiscalWeek(d, fyStart), date: d }); prev = d; }
       return;
     }
+    const mm = MONTH_HEADER.exec(t);
+    if (mm) {
+      const mi = MONTHS.indexOf(mm[1].slice(0, 3).toLowerCase());
+      const yr = mm[2].length === 2 ? 2000 + Number(mm[2]) : Number(mm[2]);
+      const first = `${yr}-${String(mi + 1).padStart(2, '0')}-01`;
+      const next = mi === 11 ? `${yr + 1}-01-01` : `${yr}-${String(mi + 2).padStart(2, '0')}-01`;
+      periods.push({ col, fw: fiscalWeek(first, fyStart), date: first, end: addDays(next, -1), month: true });
+      return;
+    }
     const asDate = typeof cell === 'number' ? parseDateCell(cell) : parseDateCell(t.replace(/^week (of|ending)\s*/i, ''));
     if (asDate) periods.push({ col, fw: fiscalWeek(asDate, fyStart), date: asDate });
   });
@@ -420,7 +431,7 @@ function detectWideAnalytics(sheets: Sheet[], name: string, today: ISODate, fySt
   return null;
 }
 
-function buildAnalyticsWide(ctx: Ctx, w: WideLayout): AttributeWeekly[] {
+function buildAnalyticsWide(ctx: Ctx, w: WideLayout): { aw: AttributeWeekly[]; range: MedalliaRange | null } {
   const body = w.sheet.rows.slice(w.headerIndex + 1);
   const sizeRow = body.find((r) => r && /sample size|^n$|responses/i.test(rowLabel(r)));
   const size = (col: number) => (sizeRow ? parseNumber(sizeRow[col]) : null);
@@ -441,11 +452,11 @@ function buildAnalyticsWide(ctx: Ctx, w: WideLayout): AttributeWeekly[] {
     const vals = w.periods.map((p) => parseNumber(row[p.col])).filter((v): v is number => v !== null);
     return vals.length && vals.every((v) => v <= 1) && !w.periods.some((p) => String(row[p.col] ?? '').includes('%')) ? 100 : 1;
   };
-  const weeks = [...new Set(w.periods.map((p) => p.fw))].filter((fw) => fw >= 1 && fw <= 52);
+  const weeks = [...new Set(w.periods.filter((p) => !p.month).map((p) => p.fw))].filter((fw) => fw >= 1 && fw <= 52);
   const out: AttributeWeekly[] = [];
   const totalMismatch: string[] = [];
   for (const fw of weeks) {
-    const cols = w.periods.filter((p) => p.fw === fw);
+    const cols = w.periods.filter((p) => p.fw === fw && !p.month);
     const n = sizeRow ? cols.reduce((a, p) => a + (size(p.col) ?? 0), 0) : 0;
     for (const m of measures) {
       const scale = scaleOf(m.row);
@@ -468,8 +479,27 @@ function buildAnalyticsWide(ctx: Ctx, w: WideLayout): AttributeWeekly[] {
       }
     }
   }
-  const dates = w.periods.map((p) => p.date).filter((d): d is ISODate => !!d).sort();
+  const dates = w.periods.flatMap((p) => [p.date, p.end]).filter((d): d is ISODate => !!d).sort();
   if (dates.length) ctx.report.dateRange = [dates[0], dates[dates.length - 1]];
+  // Whole-range LTR: Medallia's Total column when present, else Sample-Size-weighted across every column.
+  let range: MedalliaRange | null = null;
+  const ltrRow = measures.find((m) => m.attr === 'ltr')?.row;
+  const fwsAll = w.periods.flatMap((p) => [p.fw, ...(p.end ? [fiscalWeek(p.end, ctx.fyStart)] : [])]).filter((fw) => fw >= 1 && fw <= 52);
+  if (ltrRow && fwsAll.length && (w.periods.length > 7 || w.periods.some((p) => p.month) || new Set(fwsAll).size > 1)) {
+    const scale = scaleOf(ltrRow);
+    const total = w.totalCol !== null ? parseNumber(ltrRow[w.totalCol]) : null;
+    const nTotal = sizeRow ? (w.totalCol !== null ? size(w.totalCol) : null) ?? w.periods.reduce((a, p) => a + (size(p.col) ?? 0), 0) : null;
+    let num = 0, den = 0;
+    for (const p of w.periods) { const v = parseNumber(ltrRow[p.col]); const wgt = sizeRow ? size(p.col) ?? 0 : 1; if (v !== null && wgt > 0) { num += v * scale * wgt; den += wgt; } }
+    const ltr = total !== null ? total * scale : den ? num / den : null;
+    if (ltr !== null) {
+      const fwFrom = Math.min(...fwsAll), fwTo = Math.max(...fwsAll);
+      const last = [...w.periods].sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '')).at(-1);
+      range = { id: `${fwFrom}-${fwTo}`, fwFrom, fwTo, from: dates[0], to: dates[dates.length - 1], ltr, n: nTotal, basis: total !== null ? 'total' : 'computed', sourceFile: ctx.fileName,
+        ...(last?.month ? { openEnd: { lastStartFw: last.fw } } : {}) };
+      (ctx.report.info ??= []).push(`Whole-range LTR FW${fwFrom}–FW${fwTo}: ${ltr.toFixed(2)}%${nTotal !== null ? ` on ${nTotal.toLocaleString('en-US')} surveys` : ''} (${range.basis === 'total' ? 'from the Total column' : 'weighted by Sample Size'}). The LTR Slide uses it as YTD when it starts at the beginning of the fiscal year.`);
+    }
+  }
   const outside = w.periods.filter((p) => p.fw < 1 || p.fw > 52).length;
   if (outside) drop(ctx.report, 'Column outside the fiscal year');
   if (w.anchorNote) ctx.report.warnings.push(w.anchorNote);
@@ -480,7 +510,7 @@ function buildAnalyticsWide(ctx: Ctx, w: WideLayout): AttributeWeekly[] {
   if (!sizeRow) ctx.report.warnings.push('No Sample Size row: days are weighted equally and n is unknown.');
   else ctx.report.warnings.push('n per attribute is Medallia’s survey Sample Size (the export has no per-question count).');
   if (totalMismatch.length) ctx.report.warnings.push(`Computed weekly values differ from the file’s Total column: ${totalMismatch.join('; ')}.`);
-  return out;
+  return { aw: out, range };
 }
 
 // ───────────────────────── entry point ─────────────────────────
@@ -503,12 +533,12 @@ export function parseFile(req: ParseRequest): ParsedFile {
       if (wide && (!cand || cand.missing.length > 0)) {
         const report = newReport('medallia-analytics');
         const ctx: Ctx = { fileName: req.name, fyStart: req.fyStart, rules: req.rules, salt: req.salt, originals: [], report };
-        const aw = buildAnalyticsWide(ctx, wide);
+        const { aw, range } = buildAnalyticsWide(ctx, wide);
         return {
           ...base,
           candidate: { kind: 'medallia-analytics', sheet: wide.sheet.name, headerIndex: wide.headerIndex, map: {}, missing: [], score: 99 },
           headers: (wide.sheet.rows[wide.headerIndex] ?? []).map(cellText),
-          build: { kind: 'medallia-analytics', surveys: [], calls: [], followups: [], stores: [], attributeWeekly: aw, originals: [], report },
+          build: { kind: 'medallia-analytics', surveys: [], calls: [], followups: [], stores: [], attributeWeekly: aw, originals: [], report, medalliaRange: range },
           ms: performance.now() - t0,
         };
       }

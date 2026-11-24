@@ -73,3 +73,27 @@ describe('Medallia Analytics export (real layout)', () => {
     expect(wrap.map((x) => x.date)).toEqual(['2026-10-31', '2026-11-01']);
   });
 });
+
+describe('Medallia expanded view (YTD)', () => {
+  const MONTHS: unknown[][] = [
+    [null, 'Feb 2026', 'Mar 2026', 'Apr 2026', 'May 2026', 'Jun 2026', 'Jul 2026', 'Aug 2026', 'Sep 2026', 'Oct 2026', 'Nov 2026', 'Total'],
+    ['Sample Size', 300, 350, 380, 400, 420, 410, 390, 370, 400, 209, 3629],
+    ['Likelihood to Recommend (LTR)', 93, 94, 93, 92.5, 93.2, 93.8, 92.9, 93.1, 93.4, 91.4, 93.1],
+    ['Project Value', 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90],
+    ['Professionalism', 97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 97],
+    ['Ease of Process', 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88],
+  ];
+  it('reads the whole-range LTR and Sample Size from the Total column', () => {
+    const p = parseFile(req('Analytics - 2026-11-24T090000.000.xlsx', file(MONTHS)));
+    const r = p.build!.medalliaRange!;
+    expect(r).toMatchObject({ fwFrom: 1, ltr: 93.1, n: 3629, basis: 'total', from: '2026-02-01' });
+    expect(r.openEnd).toBeTruthy();
+    expect(r.openEnd!.lastStartFw).toBeLessThanOrEqual(41);
+    expect(r.fwTo).toBeGreaterThanOrEqual(41);
+    // Month columns never become weekly attribute records.
+    expect(p.build!.attributeWeekly).toHaveLength(0);
+  });
+  it('a one-week export has no whole-range value', () => {
+    expect(parseFile(req('Analytics - 2026-11-23T114201.994.xlsx', file(REAL))).build!.medalliaRange ?? null).toBeNull();
+  });
+});

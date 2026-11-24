@@ -12,6 +12,7 @@ import { monthDay, rangeLabel } from '@/lib/dates';
 import { storeLabel } from '@/domain/geo';
 import { copyText, downloadBlob } from '@/data/export';
 import { buildModel, signed, valueColor } from '@/slide/model';
+import type { MedalliaRange } from '@/ingest/types';
 import { COLORS, H, W, fitMap, placeCallouts } from '@/slide/layout';
 import { paintMap, paintPlaceholder, regionCenter, PLACEHOLDER_ASPECT } from '@/slide/mapCanvas';
 import { defaultEdits, getDriverDefs, loadEdits, resetEdits, saveEdits, saveSnapshot, type SlideEdits, type SlideSnapshot } from '@/slide/state';
@@ -50,6 +51,7 @@ export function LtrSlide() {
   const mapAsset = useLive(async () => ((await db.kv.get('regionMap'))?.value as RegionMapAsset | undefined) ?? null, []);
   const driverDefs = useLive(() => getDriverDefs(), []);
   const saved = useLive(() => (fw ? loadEdits(fw) : Promise.resolve(null)), [fw]);
+  const ranges = useLive(async () => (await db.kv.where('key').startsWith('medalliaRange:').toArray()).map((r) => r.value as MedalliaRange), []);
   const [drawer, setDrawer] = useState<{ kind: 'region'; region: string } | { kind: 'low' } | { kind: 'info' } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [mapSrc, setMapSrc] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export function LtrSlide() {
   const note = (m: string) => { setFlash(m); setTimeout(() => setFlash(null), 2200); };
 
   const regionCfg = cfg.data ?? DEFAULT_REGION_CONFIG;
-  const model = useMemo(() => (data && fw ? buildModel(data.ds.surveys, data.ds.attributeWeekly, fw, data.benchmark, regionCfg, driverDefs.data) : null), [data, fw, regionCfg, driverDefs.data]);
+  const model = useMemo(() => (data && fw ? buildModel(data.ds.surveys, data.ds.attributeWeekly, fw, data.benchmark, regionCfg, driverDefs.data, ranges.data ?? [], saved.data?.ytdOverride ?? null) : null), [data, fw, regionCfg, driverDefs.data, ranges.data, saved.data?.ytdOverride]);
   const defaults = useMemo(() => (model && data ? defaultEdits(model.m, model.ltrSurveys, data.ds.tags) : null), [model, data]);
   const edits: SlideEdits | null = saved.data ?? defaults;
 
@@ -93,7 +95,7 @@ export function LtrSlide() {
       .map(({ item, box: b, anchor }) => ({ ...item, box: b, anchor }));
     const w = data.week;
     const title = `HomeCare+ LTR · FW${fw}`;
-    const subtitle = `${rangeLabel(w.start, w.end)}, ${w.end.slice(0, 4)} · WBR ${monthDay(w.wbr)} · Q${w.quarter} · YTD ${m.ytd.display ?? '—'} on ${m.ytd.n.toLocaleString('en-US')}`;
+    const subtitle = `${rangeLabel(w.start, w.end)}, ${w.end.slice(0, 4)} · WBR ${monthDay(w.wbr)} · Q${w.quarter} · YTD ${model.ytd.display ?? '—'} on ${model.ytd.n.toLocaleString('en-US')}`;
     const kpis: Kpi[] = [
       { id: 'ltr', label: `FW${fw} LTR`, value: `${m.cur.display ?? '—'}`, color: valueColor(m.cur, m.benchmark), sub: `${m.delta === null ? '' : m.delta < 0 ? `▼${-m.delta}` : m.delta > 0 ? `▲${m.delta}` : 'flat'} vs FW${fw - 1} (${m.prior.display ?? '—'}) · n=${m.cur.n}`, tip: `${m.cur.ltr?.toFixed(2) ?? '—'}% = ${m.cur.promoters} of ${m.cur.n} scored 9–10` },
       { id: 'bench', label: 'vs benchmark', value: signed(m.benchDelta), color: m.benchDelta !== null && m.cur.ltr !== null && m.cur.ltr >= m.benchmark ? COLORS.blue : COLORS.red, sub: `Benchmark ${m.benchmark}`, tip: `Rounded LTR ${m.cur.display} minus the ${m.benchmark} benchmark` },
@@ -101,7 +103,7 @@ export function LtrSlide() {
       { id: 'low', label: 'Scored 0–8', value: `${m.cur.low08}`, color: m.overAllowance > 0 ? COLORS.red : COLORS.ink,
         sub: edits.showAllowance ? `allowed ${m.cur.allowed} at ${m.benchmark} · ${m.overAllowance > 0 ? `${m.overAllowance} over` : 'within'}` : `of ${m.cur.n} surveys`, tip: 'Show the surveys that scored 0–8' },
     ];
-    const notes = talkTrack(m, model.drivers, edits);
+    const notes = talkTrack(m, model.drivers, edits, model.ytd);
     return { box, centers, callouts, title, subtitle, kpis, notes };
   }, [model, edits, data, asset, regionCfg, fw]);
 
@@ -271,6 +273,8 @@ export function LtrSlide() {
               </label>
             </div>
 
+            <YtdEntry key={`${fw}:${edits.ytdOverride?.ltr ?? ''}:${edits.ytdOverride?.n ?? ''}`} value={edits.ytdOverride ?? null} source={model.ytd.source} onSave={(v) => update({ ytdOverride: v })} />
+
             <div>
               <h3 className="mb-1 text-sm font-semibold">Callouts ({edits.callouts.length} of 6)</h3>
               <div className="grid gap-2 lg:grid-cols-2">
@@ -317,5 +321,27 @@ export function LtrSlide() {
       </div>
       {drawerEl}
     </>
+  );
+}
+
+/** YTD typed in from Medallia's expanded view. Saved only when both numbers are valid. */
+function YtdEntry({ value, source, onSave }: { value: { ltr: number; n: number } | null; source: string; onSave: (v: { ltr: number; n: number } | null) => void }) {
+  const [ltr, setLtr] = useState(value ? String(value.ltr) : '');
+  const [n, setN] = useState(value ? String(value.n) : '');
+  const l = Number(ltr), k = Number(n.replace(/,/g, ''));
+  const valid = ltr !== '' && n !== '' && l > 0 && l <= 100 && Number.isInteger(k) && k > 0;
+  return (
+    <div className="flex flex-wrap items-end gap-2 text-sm">
+      <span className="w-full text-xs text-muted">YTD from Medallia’s expanded view (optional). The slide uses, in order: this entry, a Medallia Analytics export run from the start of the year, then the Tracker. Now showing: {source}.</span>
+      <label className="flex flex-col gap-1">YTD LTR %
+        <input inputMode="decimal" className="h-8 w-24 rounded-lg border border-border bg-surface px-2" value={ltr} onChange={(e) => setLtr(e.target.value)} placeholder="e.g. 93.1" />
+      </label>
+      <label className="flex flex-col gap-1">YTD surveys
+        <input inputMode="numeric" className="h-8 w-28 rounded-lg border border-border bg-surface px-2" value={n} onChange={(e) => setN(e.target.value)} placeholder="e.g. 3,629" />
+      </label>
+      <Button className="h-8" disabled={!valid} onClick={() => onSave({ ltr: l, n: k })}>Use these</Button>
+      {value && <Button variant="ghost" className="h-8" onClick={() => onSave(null)}>Clear</Button>}
+      {(ltr || n) && !valid && <span className="text-xs text-surveys">Enter a % between 0 and 100 and a whole number of surveys.</span>}
+    </div>
   );
 }

@@ -176,6 +176,7 @@ One 1920×1080 slide, scaled to fit, for the weekly LTR readout (route `#/slide`
 | Key Drivers | Medallia Analytics % 9–10 for the week (falls back to per-survey answers). Which attributes appear, and their short names, are set in Settings. |
 | Cards | Medallia buckets: Promoters 9–10, Passives 7–8, Detractors 0–6. Drivers and bullets are drafted from comment tags and can be edited. |
 | Exports | .pptx: native text, a native bar+line combo chart, a native drivers chart, the map as a picture, and the talk track in the speaker notes (in slide order, then a “Back pocket”), with no comment parts so it opens on iPad. Also PNG at 3840×2160 and a JSON snapshot (saved per week in IndexedDB and downloaded). |
+| YTD | Shows, in order of preference: a value typed in under “Edit the slide”, then a Medallia Analytics export run from the start of the fiscal year through the slide week (its Total column: LTR and Sample Size; month or day columns both work), then the Tracker (FW1 through the slide week). Leadership's YTD (e.g. 93 on 3,629) comes from Medallia's expanded view, which counts differently from the Tracker; the validation panel shows both. |
 | Validation panel | Survey count by week, YTD (compare with the Tracker), Tracker vs Medallia week LTR, duplicate appointments (same date = warning; repeat visits = info), regions without surveys, regions missing from the division config, missing Key Drivers. |
 
 ## Quality checklist

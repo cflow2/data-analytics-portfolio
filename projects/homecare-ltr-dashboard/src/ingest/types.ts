@@ -61,6 +61,24 @@ export interface BuildResult {
   report: ValidationReport;
   /** Tracker only: the region map pictures from the “LTR Region Map” sheet */
   regionMap?: import('./regionMap').RegionMapAsset | null;
+  /** Medallia Analytics only: the whole-range LTR (e.g. a fiscal-year-to-date view) */
+  medalliaRange?: MedalliaRange | null;
+}
+
+/** Medallia's LTR and Sample Size over the full date range of an Analytics export (its Total column). */
+export interface MedalliaRange {
+  id: string; // `${fwFrom}-${fwTo}`
+  fwFrom: number;
+  fwTo: number;
+  from?: ISODate;
+  to?: ISODate;
+  ltr: number;
+  n: number | null;
+  /** 'total' = read from the file's Total column; 'computed' = Sample-Size-weighted across the columns */
+  basis: 'total' | 'computed';
+  /** Last column is a month: the true end date is unknown, so any week from `lastStartFw` to `fwTo` may be the end */
+  openEnd?: { lastStartFw: number };
+  sourceFile: string;
 }
 
 export interface ParseRequest {

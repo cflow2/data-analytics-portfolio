@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { atOrAbove, calloutHeadline, displayWhole, keyDrivers, scoresPhrase, slideMetrics, suggestCallouts, weekStats, DEFAULT_DRIVERS } from './ltrMetrics';
 import { fw41Fixture } from './fw41Fixture';
+import { buildModel } from './model';
 
 const m = slideMetrics(fw41Fixture(), 41);
 const reg = (r: string) => m.regions.find((x) => x.region === r)!;
@@ -87,5 +88,23 @@ describe('key drivers', () => {
     const a = [['professionalism', 95.2], ['timeToAppt', 90.8], ['processPrior', 84.1], ['scheduling', 83.6]].map(([attr, pct]) => ({ id: `41:${attr}`, fw: 41, attr, top2: 0, n: 100, pct }));
     const d = keyDrivers(41, DEFAULT_DRIVERS, a as never, []);
     expect(d.map((x) => [x.short, x.display])).toEqual([['Professionalism', 95], ['Complete Time', 91], ['Process', 84], ['Scheduling', 84]]);
+  });
+});
+
+describe('YTD source', () => {
+  const range = { id: '1-41', fwFrom: 1, fwTo: 41, ltr: 93.05, n: 3629, basis: 'total' as const, sourceFile: 'a.xlsx' };
+  it('uses the Tracker when nothing else is loaded', () => {
+    const y = buildModel(fw41Fixture(), [], 41, 93).ytd;
+    expect(y.source).toBe('Tracker');
+  });
+  it('prefers a Medallia year-to-date export ending on the slide week', () => {
+    const y = buildModel(fw41Fixture(), [], 41, 93, undefined, undefined, [range]).ytd;
+    expect([y.source, y.display, y.n]).toEqual(['Medallia', 93, 3629]);
+    expect(buildModel(fw41Fixture(), [], 40, 93, undefined, undefined, [range]).ytd.source).toBe('Tracker');
+    expect(buildModel(fw41Fixture(), [], 41, 93, undefined, undefined, [{ ...range, fwFrom: 10 }]).ytd.source).toBe('Tracker');
+  });
+  it('a typed-in value wins', () => {
+    const y = buildModel(fw41Fixture(), [], 41, 93, undefined, undefined, [range], { ltr: 92.96, n: 3600 }).ytd;
+    expect([y.source, y.display, y.n]).toEqual(['Entered', 93, 3600]);
   });
 });

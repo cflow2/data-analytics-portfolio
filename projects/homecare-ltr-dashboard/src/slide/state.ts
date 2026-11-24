@@ -14,6 +14,8 @@ export interface SlideEdits {
   shoutout: string;
   close: string;
   showAllowance: boolean;
+  /** YTD typed in from Medallia's expanded view (overrides the imported value) */
+  ytdOverride?: { ltr: number; n: number } | null;
   updatedAt?: string;
 }
 

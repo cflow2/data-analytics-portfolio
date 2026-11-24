@@ -222,6 +222,7 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
   }
 
   if (b.regionMap) await database.kv.put({ key: 'regionMap', value: b.regionMap });
+  if (b.medalliaRange) await database.kv.put({ key: `medalliaRange:${b.medalliaRange.id}`, value: { ...b.medalliaRange, importedAt: new Date().toISOString() } });
   // The week calls were imported into becomes the reporting week (the default in the filter bar).
   if (b.kind === 'loyalty-cases' && opts.targetWeek) {
     const prev = (await database.kv.get('reportingWeek'))?.value as number | undefined;

@@ -4,6 +4,7 @@
  */
 import { atOrAbove, type DriverValue, type RegionRow, type SlideMetrics, type WeekStats } from './ltrMetrics';
 import type { SlideEdits } from './state';
+import type { YtdValue } from './model';
 
 export const WORDS_PER_MINUTE = 140;
 const pts = (d: number | null) => (d === null ? 'with no prior week to compare' : d === 0 ? 'flat' : `${d > 0 ? 'up' : 'down'} ${Math.abs(d)} point${Math.abs(d) === 1 ? '' : 's'}`);
@@ -21,7 +22,7 @@ function regionSentence(r: RegionRow, why: string, categories: string[], benchma
   return `${r.region} came in at ${r.cur.display}${move}, ${status}. ${why[0]?.toUpperCase() ?? ''}${why.slice(1)}.${cat.length ? ` The comments point to ${list(cat.map((c) => CAT_PHRASE[c] ?? c.toLowerCase()))}.` : ''}${caution}`;
 }
 
-export function talkTrack(m: SlideMetrics, drivers: DriverValue[], e: SlideEdits): { text: string; words: number; minutes: number } {
+export function talkTrack(m: SlideMetrics, drivers: DriverValue[], e: SlideEdits, ytd?: YtdValue): { text: string; words: number; minutes: number } {
   const { cur, prior, benchmark } = m;
   const lines: string[] = ['TALK TRACK'];
 
@@ -69,7 +70,9 @@ export function talkTrack(m: SlideMetrics, drivers: DriverValue[], e: SlideEdits
   const words = body.replace(/^\d\. /gm, '').split(/\s+/).filter(Boolean).length;
   const back: string[] = ['BACK POCKET'];
   back.push(`• Exact LTR: FW${m.fw} ${pct1(cur)}% (${cur.promoters} of ${cur.n}); FW${m.fw - 1} ${pct1(prior)}% (${prior.promoters} of ${prior.n}).`);
-  back.push(`• Year to date: ${pct1(m.ytd)}% on ${m.ytd.n.toLocaleString('en-US')} surveys.`);
+  back.push(ytd && ytd.source !== 'Tracker'
+    ? `• Year to date: ${ytd.ltr?.toFixed(1)}% on ${ytd.n.toLocaleString('en-US')} surveys (${ytd.note}); the Tracker shows ${pct1(m.ytd)}% on ${m.ytd.n.toLocaleString('en-US')}.`
+    : `• Year to date: ${pct1(m.ytd)}% on ${m.ytd.n.toLocaleString('en-US')} surveys (Tracker).`);
   back.push(`• Allowance at ${benchmark}: floor(${cur.n} × 0.07) = ${cur.allowed}; actual 0–8 = ${cur.low08}.`);
   back.push(`• Regions under 10 surveys (asterisked): ${m.regions.filter((r) => r.lowCount).map((r) => `${r.region} (n=${r.cur.n})`).join(', ') || 'none'}.`);
   back.push(`• Divisions exact: ${m.divisions.map((d) => `${title(d.division)} ${pct1(d.cur)}% on ${d.cur.n} (FW${m.fw - 1} ${pct1(d.prior)}% on ${d.prior.n})`).join('; ')}.`);
