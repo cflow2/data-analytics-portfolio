@@ -6,4 +6,5 @@ A collection of data analytics projects showcasing Power BI dashboards, SQL anal
 - [Healthcare — No-Show Prediction](projects/healthcare-no-show-model/README.md)
 - [Manufacturing — Pareto & ANOVA](projects/manufacturing-pareto-anova/README.md)
 - [Data Cleaning Case Studies](projects/data-cleaning-case-studies/README.md)
+- [HomeCare+ LTR & Customer Intelligence Dashboard](projects/homecare-ltr-dashboard/README.md) (React + TypeScript, local single-file app)
 

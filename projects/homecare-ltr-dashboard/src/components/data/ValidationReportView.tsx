@@ -1,0 +1,99 @@
+import { monthDay, rangeLabel } from '@/lib/dates';
+import type { ValidationReport } from '@/ingest/types';
+import { cx } from '@/components/ui/primitives';
+
+function Row({ label, children, flag }: { label: string; children: React.ReactNode; flag?: boolean }) {
+  return (
+    <div className="grid grid-cols-[180px_1fr] gap-3 border-t border-border py-1.5 text-sm first:border-t-0">
+      <dt className={cx('text-muted', flag && 'font-medium text-surveys')}>{flag ? '⚠ ' : ''}{label}</dt>
+      <dd className="tnum">{children}</dd>
+    </div>
+  );
+}
+
+const REDACTION_LABEL: Record<string, string> = {
+  email: 'emails', order: 'order #s', phone: 'phones', address: 'addresses',
+  'name-cue': 'names', 'staff-cue': 'names', 'first-name': 'names', 'name-verb': 'names', 'known-names': 'names',
+};
+
+export function ValidationReportView({ report }: { report: ValidationReport }) {
+  const dropped = Object.entries(report.dropped);
+  const totalDropped = dropped.reduce((a, [, n]) => a + n, 0);
+  const weeks = Object.entries(report.weeks).map(([w, n]) => [Number(w), n] as const).sort((a, b) => a[0] - b[0]);
+  const redactions = Object.entries(Object.entries(report.redactions).reduce<Record<string, number>>((a, [k, n]) => {
+    const label = REDACTION_LABEL[k] ?? k;
+    a[label] = (a[label] ?? 0) + n;
+    return a;
+  }, {}));
+  return (
+    <dl className="mt-2">
+      <Row label="Rows">{report.rowsRead.toLocaleString()} read · {report.rowsKept.toLocaleString()} kept · {totalDropped.toLocaleString()} dropped</Row>
+      {dropped.length > 0 && (
+        <Row label="Dropped because" flag={totalDropped > 0}>
+          <ul>{dropped.map(([why, n]) => <li key={why}>{why}: {n.toLocaleString()}</li>)}</ul>
+        </Row>
+      )}
+      {report.dateRange && (
+        <Row label="Dates found">
+          {rangeLabel(report.dateRange[0], report.dateRange[1])}, {report.dateRange[0].slice(0, 4)}
+        </Row>
+      )}
+      {weeks.length > 0 && (
+        <Row label="Fiscal weeks covered">
+          {weeks.length > 8 ? `FW${weeks[0][0]}–FW${weeks[weeks.length - 1][0]} (${weeks.length} weeks)` : weeks.map(([w, n]) => `FW${w}: ${n.toLocaleString()}`).join(' · ')}
+        </Row>
+      )}
+      {!!report.removedFromTracker?.length && (
+        <Row label="Removed (no longer in the Tracker)" flag>
+          {report.removedFromTracker.reduce((n, r) => n + r.count, 0)} survey(s): {report.removedFromTracker.map((r) => `FW${r.fw} ${r.count}`).join(' · ')}. Those weeks now match this Tracker.
+        </Row>
+      )}
+      {report.alreadyLoaded !== undefined && report.alreadyLoaded > 0 && <Row label="Already loaded">{report.alreadyLoaded.toLocaleString()} rows were already in the database (updated, not duplicated)</Row>}
+      {report.merged !== undefined && report.merged > 0 && <Row label="Merged into Tracker surveys">{report.merged.toLocaleString()}</Row>}
+      {report.scoreMismatches && (
+        <Row label="Score vs LTR" flag={report.scoreMismatches.length > 0}>
+          {report.scoreMismatches.length === 0 ? 'All Score (100/0) values agree with Likelihood to Recommend.' : (
+            <>
+              {report.scoreMismatches.length} row(s) disagree. LTR uses Likelihood to Recommend.
+              <ul className="mt-1 text-xs text-muted">{report.scoreMismatches.slice(0, 10).map((m) => <li key={m.id}>{m.id}: LTR {m.ltr}, Score {m.score100}</li>)}</ul>
+            </>
+          )}
+        </Row>
+      )}
+      {!!report.fwMismatches && <Row label="FW # column" flag>{report.fwMismatches} row(s) where the file’s FW # differs from the calendar. The calendar was used.</Row>}
+      {!!report.noScore && <Row label="No valid score">{report.noScore} row(s) kept for their comment only (not in LTR)</Row>}
+      {report.followupCheck?.map((c) => (
+        <Row key={c.fw} label={`FW${c.fw} follow-up check`} flag={c.missing.length > 0}>
+          Tracker non-promoters: {c.trackerNonPromoters} · follow-up rows for FW{c.fw}: {c.inFile} · documented {c.documented} · email only {c.emailOnly}
+          {c.missing.length > 0 && (
+            <ul className="mt-1 text-xs">
+              <li className="text-muted">Missing from the follow-up file:</li>
+              {c.missing.map((m) => <li key={m.surveyId}>{m.surveyId} · store {m.storeNo} · {monthDay(m.date)} · score {m.score}</li>)}
+            </ul>
+          )}
+        </Row>
+      ))}
+      {report.medalliaLtrCheck?.map((c) => {
+        const gap = c.trackerPct === null ? null : c.medalliaPct - c.trackerPct;
+        return (
+          <Row key={c.fw} label={`FW${c.fw} LTR cross-check`} flag={gap !== null && (Math.abs(gap) >= 1 || c.medalliaN !== c.trackerN)}>
+            Medallia {c.medalliaPct.toFixed(1)}% (n={c.medalliaN}) · Tracker {c.trackerPct === null ? 'not loaded' : `${c.trackerPct.toFixed(1)}% (n=${c.trackerN})`}
+            {gap !== null && <> · gap {gap >= 0 ? '+' : ''}{gap.toFixed(1)} pts. The Tracker is the source of truth.</>}
+          </Row>
+        );
+      })}
+      {report.storesFromSheets !== undefined && <Row label="Store → district">{report.storesFromSheets ? `${report.storesFromSheets} stores read from the Tracker’s store sheets` : 'Not in the Tracker. Upload a mapping CSV.'}</Row>}
+      {report.unmappedStores && (
+        <Row label="Unmapped stores" flag={report.unmappedStores.length > 0}>
+          {report.unmappedStores.length === 0 ? 'None' : `${report.unmappedStores.length}: ${report.unmappedStores.slice(0, 12).join(', ')}${report.unmappedStores.length > 12 ? '…' : ''}`}
+        </Row>
+      )}
+      <Row label="Redaction">
+        {redactions.length ? redactions.map(([k, n]) => `${n} ${k}`).join(' · ') : 'No PII found'}
+        {report.redactionUncertain > 0 && <span className="text-surveys"> · {report.redactionUncertain} uncertain (sent to Review Queue)</span>}
+      </Row>
+      {report.info?.map((w) => <Row key={w} label="Check">✓ {w}</Row>)}
+      {report.warnings.map((w) => <Row key={w} label="Note" flag>{w}</Row>)}
+    </dl>
+  );
+}
