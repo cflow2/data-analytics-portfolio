@@ -115,8 +115,8 @@ export function cleanComment(v: unknown): string {
 /** Appointment IDs compare as trimmed text ("123.0" and " 123" are the same appointment). */
 export const normalizeApptId = (v: unknown): string => cellText(v).replace(/\s+/g, '').replace(/^(\d+)\.0+$/, '$1');
 
-/** 10-digit US numbers as (555) 014-2231; anything else is kept as written. */
+/** 10-digit US numbers as 555-014-2231 (as in the store manager email); anything else is kept as written. */
 export function formatPhone(raw: string): string {
   const d = raw.replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
-  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : raw.trim();
+  return d.length === 10 ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : raw.trim();
 }

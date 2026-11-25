@@ -5,7 +5,7 @@ import { formatPhone } from '@/ingest/normalize';
 const facts: EmailFacts = {
   surveyId: 'S1', score: 3, quote: 'He said the "dryer vent" was not covered & left.', surveyDate: '2026-11-05', appointmentDate: '2026-11-03',
   storeNo: '0123', storeCity: 'Sampletown', storeState: 'NC', rootCause: 'completion',
-  customerName: 'DEMO Avery Sample', customerPhone: '(555) 555-0101', associate: 'DEMO Rowan AB.', jobId: 'SA000000000001', smName: 'Lee, Pat',
+  customerName: 'DEMO Avery Sample', customerPhone: '555-555-0101', associate: 'DEMO Rowan AB.', jobId: 'SA000000000001', smName: 'Lee, Pat',
 };
 
 describe('store manager email', () => {
@@ -21,7 +21,7 @@ describe('store manager email', () => {
       '',
       'Customer Information',
       '• DEMO Avery Sample',
-      '• (555) 555-0101',
+      '• 555-555-0101',
       '• Store 0123 – Sampletown, NC',
       '• Associate: DEMO Rowan AB.',
       '• Job ID: SA000000000001',
@@ -35,6 +35,7 @@ describe('store manager email', () => {
     ]);
     expect(e.subject).toBe('HomeCare+ LTR detractor (3) – Store 0123 – DEMO Avery Sample');
     expect(e.html).toContain('<b>3 LTR detractor</b>');
+    expect(e.html).toContain('appointment on <b>11/03/26</b> with');
     expect(e.html).toContain('<i>&quot;He said the &quot;dryer vent&quot; was not covered &amp; left.&quot;</i>');
     expect(e.html).toContain('<li>Job ID: SA000000000001</li>');
   });
@@ -65,8 +66,8 @@ describe('store manager email', () => {
     expect(firstName('DEMO SM Avery')).toBe('Avery');
     expect(firstName(undefined)).toBe('');
     expect(shortDate('2026-01-31')).toBe('01/31/26');
-    expect(formatPhone('5555550142')).toBe('(555) 555-0142');
-    expect(formatPhone('+1 555.555.0142')).toBe('(555) 555-0142');
+    expect(formatPhone('5555550142')).toBe('555-555-0142');
+    expect(formatPhone('+1 555.555.0142')).toBe('555-555-0142');
     expect(formatPhone('ext 12')).toBe('ext 12');
   });
 });

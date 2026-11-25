@@ -105,6 +105,8 @@ export function buildSmEmail(f: EmailFacts, tpl: EmailTemplate = DEFAULT_TEMPLAT
   const place = [f.storeCity, f.storeState].filter(Boolean).join(', ');
   const storeLine = `Store ${store}${place ? ` – ${place}` : ''}`;
   const when = f.appointmentDate ? `following a HomeCare+ appointment on ${shortDate(f.appointmentDate)}` : `following a HomeCare+ appointment (survey dated ${shortDate(f.surveyDate)})`;
+  // The example email bolds the appointment date.
+  const whenHtml = f.appointmentDate ? `following a HomeCare+ appointment on <b>${shortDate(f.appointmentDate)}</b>` : esc(when);
   const quote = f.quote.trim();
   const quoteV = quote ? { text: quote, html: esc(quote).replace(/\n/g, '<br>') } : val('', 'Customer comment (the survey has none)');
   const ask = (f.rootCause && THEME_ASK[f.rootCause]) || DEFAULT_ASK;
@@ -153,7 +155,7 @@ export function buildSmEmail(f: EmailFacts, tpl: EmailTemplate = DEFAULT_TEMPLAT
   const html = [
     '<div style="font-family:Aptos,Calibri,Arial,sans-serif;font-size:11pt;color:#000">',
     p(`Hi ${sm.html},`),
-    p(`We received a <b>${f.score} LTR detractor</b> from <b>${customer.html}</b> ${when} with <b>${associate.html}</b>${stop}`),
+    p(`We received a <b>${f.score} LTR detractor</b> from <b>${customer.html}</b> ${whenHtml} with <b>${associate.html}</b>${stop}`),
     p(`<i>&quot;${quoteV.html}&quot;</i>`),
     p('<b>Customer Information</b>'),
     `<ul style="margin:0 0 12px 0;padding-left:24px;list-style:disc">${[customer.html, phone.html, esc(storeLine), `Associate: ${associate.html}`, `Job ID: ${job.html}`].map((x) => `<li>${x}</li>`).join('')}</ul>`,

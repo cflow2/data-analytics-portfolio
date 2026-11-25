@@ -357,7 +357,7 @@ export function generateDemoData(seed = 4040): DemoData {
   const crng = new Rng(seed + 13);
   appointments.forEach((a, i) => {
     a.customerName = `DEMO ${crng.pick(CUST_FIRST)} ${crng.pick(CUST_LAST)}`;
-    if (crng.chance(0.875)) a.customerPhone = `(555) 555-01${String(i % 100).padStart(2, '0')}`;
+    if (crng.chance(0.875)) a.customerPhone = `555-555-01${String(i % 100).padStart(2, '0')}`;
   });
 
   const { subscriptionWeeks, subscriptionSnapshots } = demoSubscriptions(seed + 11, stores, surveys);

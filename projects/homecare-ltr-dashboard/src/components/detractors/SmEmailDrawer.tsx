@@ -43,7 +43,7 @@ export function emailFactsFor(s: SurveyRecord, ds: Dataset, quote: string, rootC
 
 const FIELDS: { key: Exclude<keyof EmailEdits, 'request' | 'copiedAt'>; label: string; type?: string; placeholder?: string }[] = [
   { key: 'customerName', label: 'Customer name' },
-  { key: 'customerPhone', label: 'Customer phone', type: 'tel', placeholder: '(555) 555-0100' },
+  { key: 'customerPhone', label: 'Customer phone', type: 'tel', placeholder: '555-555-0100' },
   { key: 'associate', label: 'HomeCare+ associate' },
   { key: 'jobId', label: 'Job ID', placeholder: 'SA…' },
   { key: 'appointmentDate', label: 'Appointment date', type: 'date' },

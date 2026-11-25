@@ -125,7 +125,7 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   const copiedMark = await page.locator('text=/^Copied [A-Z][a-z]{2} \\d/').count();
   check('Email SM builds the store manager email (score, customer, phone, associate, Job ID, exact quote) and copies it',
     /^Hi (\w+|\[SM first name\]),/.test(preview) && /We received a \d LTR detractor from DEMO \w+ \w+ following a HomeCare\+ appointment on \d\d\/\d\d\/\d\d with DEMO/.test(preview)
-      && /Customer Information/.test(preview) && /Job ID: DEMO-J-/.test(preview) && /Associate: DEMO/.test(preview) && /(\(555\) \d{3}-\d{4}|\[Customer phone\])/.test(preview)
+      && /Customer Information/.test(preview) && /Job ID: DEMO-J-/.test(preview) && /Associate: DEMO/.test(preview) && /(555-\d{3}-\d{4}|\[Customer phone\])/.test(preview)
       && /Thank You,/.test(preview) && /copied/i.test(copiedMsg) && copiedMark > 0, preview.split('\n').slice(0, 3).join(' | '));
 
   // 5. Daily Pulse is built from surveys

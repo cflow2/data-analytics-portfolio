@@ -37,7 +37,7 @@ describe('appointment file → associate', () => {
       ['2', 'Pat Example', '', '', '', ''],
     ])));
     const [a, b] = p.build!.appointments!;
-    expect(a).toMatchObject({ customerName: 'Avery Sample', customerPhone: '(555) 555-0109', jobId: 'SA000000000009' });
+    expect(a).toMatchObject({ customerName: 'Avery Sample', customerPhone: '555-555-0109', jobId: 'SA000000000009' });
     expect(b.customerName).toBeUndefined();
     expect(b.customerPhone).toBeUndefined();
   });
