@@ -48,6 +48,48 @@ export interface SubsPulse {
   topInstore: { storeNo: string; label: string; instore: number; subs: number }[];
   /** the export is older than the day before the meeting */
   stale: boolean;
+  /** on pace to beat the prior week's total? */
+  pace: SubsPace;
+}
+
+export interface SubsPace {
+  priorWeek: number;
+  priorTotal: number;
+  /** projected week total */
+  projected: number;
+  /** 'last-week' = scaled by where last week stood at this point; 'straight-line' = week-to-date ÷ days × 7 */
+  method: 'last-week' | 'straight-line';
+  status: 'ahead' | 'behind' | 'even';
+  /** week-to-date already beats last week's total */
+  beaten: boolean;
+  /** subscriptions still needed to beat last week, and per remaining day (null on the last day) */
+  needed: number;
+  perDay: number | null;
+  daysLeft: number;
+}
+
+/**
+ * Pace vs last week. With the export from 7 days earlier, the projection follows last week's own shape
+ * (last week's total × this week-to-date ÷ last week at the same point); otherwise it is straight-line.
+ */
+export function subsPace(fw: number, days: number, wtd: number, priorTotal: number, samePoint: number | null): SubsPace {
+  const d = Math.max(1, Math.min(7, days));
+  const useLast = samePoint !== null && samePoint > 0;
+  const projected = Math.round(useLast ? (priorTotal * wtd) / samePoint! : (wtd / d) * 7);
+  const needed = Math.max(0, priorTotal - wtd + 1);
+  const daysLeft = 7 - d;
+  return {
+    priorWeek: fw - 1, priorTotal, projected, method: useLast ? 'last-week' : 'straight-line',
+    status: wtd > priorTotal || projected > priorTotal ? 'ahead' : projected < priorTotal ? 'behind' : 'even',
+    beaten: wtd > priorTotal, needed, perDay: daysLeft > 0 ? Math.ceil(needed / daysLeft) : null, daysLeft,
+  };
+}
+
+export function paceText(p: SubsPace, fw: number): string {
+  if (p.beaten) return `FW${fw} has already passed FW${p.priorWeek}'s ${p.priorTotal.toLocaleString('en-US')}.`;
+  const verb = p.status === 'ahead' ? 'On pace to beat' : p.status === 'even' ? 'On pace to match' : 'Behind pace for';
+  const need = p.perDay !== null ? ` Needs ${p.needed.toLocaleString('en-US')} more to beat it, about ${p.perDay.toLocaleString('en-US')} a day.` : '';
+  return `${verb} FW${p.priorWeek}'s ${p.priorTotal.toLocaleString('en-US')}: projected ${p.projected.toLocaleString('en-US')}${p.method === 'straight-line' ? ' (straight-line)' : ''}.${need}`;
 }
 
 /** Subscriptions for the Daily Pulse. `from`–`to` is the pulse period (yesterday, or Sat–Sun on a Monday). */
@@ -78,7 +120,8 @@ export function subsPulse(snaps: SubscriptionSnapshot[], weeks: SubscriptionWeek
   const topInstore = Object.entries(snap.cur).filter(([no, v]) => keep(no) && v[1] > 0)
     .map(([no, [s, i]]) => ({ storeNo: no, label: storeShort(info.get(no), no), instore: i, subs: s }))
     .sort((a, b) => b.instore - a.instore || b.subs - a.subs || a.storeNo.localeCompare(b.storeNo)).slice(0, 5);
-  return { snap, fw: snap.fw, days, wtd, period, periodNote, samePointLastWeek, priorWeekFull, topInstore, stale: snap.through < to };
+  const pace = subsPace(snap.fw, days, wtd.subs, priorWeekFull.subs, samePointLastWeek ? samePointLastWeek.subs : null);
+  return { snap, fw: snap.fw, days, wtd, period, periodNote, samePointLastWeek, priorWeekFull, topInstore, stale: snap.through < to, pace };
 }
 
 // ───────── weekly series and rankings ─────────
@@ -199,4 +242,21 @@ export function subsLtrInsights(weeks: SubscriptionWeek[], surveys: SurveyRecord
     capacityCorr: rankCorr(withBoth.map((r) => r.subsPerAppt!), withBoth.map((r) => r.ltr!)),
     minSurveys,
   };
+}
+
+/**
+ * Average line for the weekly chart. 'fytd' = mean of completed weeks up to and including each week; 'rolling' = the
+ * last 4 completed weeks. A week is below average when its total (projected, for the week in progress) is under the line.
+ * The week in progress never moves the average.
+ */
+export function averageLine(rows: { fw: number; subs: number }[], inProgressFw: number | null, mode: 'fytd' | 'rolling', projected: number | null = null) {
+  const done: number[] = [];
+  return rows.map((r) => {
+    const partial = r.fw === inProgressFw;
+    if (!partial) done.push(r.subs);
+    const pool = mode === 'rolling' ? done.slice(-4) : done;
+    const avg = pool.length ? pool.reduce((a, x) => a + x, 0) / pool.length : null;
+    const value = partial && projected !== null ? projected : r.subs;
+    return { fw: r.fw, avg, partial, below: avg !== null && value < avg };
+  });
 }

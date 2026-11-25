@@ -126,6 +126,10 @@ Every survey that scores 0–8 costs 100 ÷ n points of LTR (0.5 pts when n = 20
 - LTR in store-weeks with a *Follow Up Required* (or an *Exception*) vs without.
 - By region: new subscriptions per completed appointment vs LTR (rank correlation).
 
+**Pace vs last week** (Subscriptions screen and Daily Pulse): "On pace to beat / Behind pace for FW(n−1)'s total", the projected week total, and how many more are needed to beat last week (total and per remaining day). With the export from 7 days earlier loaded, the projection follows last week's own pattern (last week's total × this week to date ÷ last week at the same point); otherwise it is straight-line (week to date ÷ days × 7) and says so.
+
+**Weekly chart average:** a line for the average to date (mean of completed weeks through each week) or a 4-week average (toggle). Weeks below the line are red; the week in progress is faded, judged by its projected total, and never moves the line.
+
 Each comparison says whether the gap is bigger than 2 standard errors ("bigger than chance alone would explain") or a hint. They are store-level patterns, not member-level proof. `src/analytics/subscriptions.ts`, tested in `subscriptions.test.ts`.
 
 ## Daily Pulse and Presentation mode

@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import type { EChartsOption } from 'echarts';
 import { useWeekData } from '@/data/useWeekData';
 import { SCREENS } from '@/screens';
-import { inGeo, storeIndex, subsLtrInsights, topInstoreStores, weeklySubs, type Comparison } from '@/analytics/subscriptions';
+import { averageLine, inGeo, storeIndex, subsLtrInsights, subsPulse, topInstoreStores, weeklySubs, type Comparison } from '@/analytics/subscriptions';
+import { PaceLine } from '@/components/subs/PaceLine';
 import { districtFor } from '@/analytics/ltr';
 import { Chart, useBaseOption } from '@/components/charts/Chart';
 import { useChartTokens } from '@/components/charts/tokens';
@@ -12,6 +13,7 @@ import { DataTable, type Col } from '@/components/ui/DataTable';
 import { Card, PageHeader, Segmented } from '@/components/ui/primitives';
 
 type Win = 'week' | '4' | 'fytd';
+type Avg = 'fytd' | 'rolling';
 const pct = (x: number | null, d = 1) => (x === null ? '—' : `${x.toFixed(d)}%`);
 
 function ComparisonLine({ c, what }: { c: Comparison; what: string }) {
@@ -31,6 +33,7 @@ export function Subscriptions() {
   const t = useChartTokens();
   const base = useBaseOption();
   const [win, setWin] = useState<Win>('4');
+  const [avgMode, setAvgMode] = useState<Avg>('fytd');
 
   const v = useMemo(() => {
     if (!data || !data.ds.subscriptionWeeks.length) return null;
@@ -50,8 +53,10 @@ export function Subscriptions() {
       const s = sets.get(w.storeSet || '—') ?? { stores: new Set(), subs: 0, instore: 0, appts: 0 };
       s.stores.add(w.storeNo); s.subs += w.subs; s.instore += w.instore; s.appts += w.appts; sets.set(w.storeSet || '—', s);
     }
+    const pulse = snap ? subsPulse(ds.subscriptionSnapshots, ds.subscriptionWeeks, snap.through, snap.through, geo) : null;
+    const live = pulse && pulse.fw === lastFw ? pulse : null;
     const insights = subsLtrInsights(filtered ? ds.subscriptionWeeks.filter((w) => keep(w.storeNo)) : ds.subscriptionWeeks, data.ltr, fy);
-    return { fy, rows, lastFw, snap, ytd, sets: [...sets].sort((a, b) => b[1].subs - a[1].subs), insights, keep, filtered, districtOf: (n: string) => districtFor(n, ds.stores) };
+    return { fy, rows, lastFw, snap, live, ytd, sets: [...sets].sort((a, b) => b[1].subs - a[1].subs), insights, keep, filtered, districtOf: (n: string) => districtFor(n, ds.stores) };
   }, [data]);
 
   const top = useMemo(() => {
@@ -65,15 +70,24 @@ export function Subscriptions() {
   }
   const r = v.rows;
   const last = r[r.length - 1], prev = r[r.length - 2];
+  const avg = averageLine(r, v.live ? v.live.fw : null, avgMode, v.live ? v.live.pace.projected : null);
+  const avgName = avgMode === 'fytd' ? 'Average to date' : '4-week average';
+  const belowCount = avg.filter((a) => a.below && !a.partial).length;
   const option: EChartsOption = base({
     grid: { left: 48, right: 16, top: 24, bottom: 36 },
-    tooltip: { trigger: 'axis', formatter: (ps) => { const i = (Array.isArray(ps) ? ps[0] : ps).dataIndex as number; const x = r[i]; return `<b>FW${x.fw}</b><br/>${x.subs.toLocaleString('en-US')} net subscriptions<br/>Online ${x.online.toLocaleString('en-US')} · In store ${x.instore}<br/>Completed appointments ${x.appts}${x.fw === v.lastFw && v.snap ? `<br/><i>to date (through ${v.snap.through})</i>` : ''}`; } },
-    legend: { bottom: 0, data: ['Online', 'In store'], textStyle: { color: t.muted } },
+    tooltip: { trigger: 'axis', formatter: (ps) => {
+      const i = (Array.isArray(ps) ? ps[0] : ps).dataIndex as number; const x = r[i]; const a = avg[i];
+      const inProg = a.partial && v.live;
+      return `<b>FW${x.fw}</b><br/>${x.subs.toLocaleString('en-US')} net subscriptions${inProg ? ` to date (through ${v.snap!.through}); projected ${v.live!.pace.projected.toLocaleString('en-US')}` : ''}<br/>Online ${x.online.toLocaleString('en-US')} · In store ${x.instore}<br/>${avgName}: ${a.avg === null ? '—' : Math.round(a.avg).toLocaleString('en-US')}${a.below ? ' · <b>below average</b>' : ''}<br/>Completed appointments ${x.appts}`;
+    } },
+    legend: { bottom: 0, data: ['Online', 'In store', 'Below average', avgName], textStyle: { color: t.muted } },
     xAxis: { type: 'category', data: r.map((x) => `FW${x.fw}`), axisTick: { show: false }, axisLabel: { color: t.muted } },
     yAxis: { type: 'value', name: 'Net subscriptions', nameTextStyle: { color: t.muted }, axisLabel: { color: t.muted }, splitLine: { lineStyle: { color: t.grid } } },
     series: [
-      { name: 'Online', type: 'bar', stack: 's', data: r.map((x) => x.online), itemStyle: { color: t.calls } },
-      { name: 'In store', type: 'bar', stack: 's', data: r.map((x) => x.instore), itemStyle: { color: t.surveys } },
+      { name: 'Online', type: 'bar', stack: 's', data: r.map((x, i) => ({ value: x.online, itemStyle: { color: avg[i].below ? t.alert : t.calls, opacity: avg[i].partial ? 0.55 : 1 } })), itemStyle: { color: t.calls } },
+      { name: 'In store', type: 'bar', stack: 's', data: r.map((x, i) => ({ value: x.instore, itemStyle: { color: avg[i].below ? t.alertSoft : t.surveys, opacity: avg[i].partial ? 0.55 : 1 } })), itemStyle: { color: t.surveys } },
+      { name: 'Below average', type: 'bar', stack: 's', data: [], itemStyle: { color: t.alert } },
+      { name: avgName, type: 'line', data: avg.map((a) => (a.avg === null ? null : Math.round(a.avg))), symbol: 'none', lineStyle: { color: t.ink, width: 2 }, itemStyle: { color: t.ink }, z: 5 },
     ],
   });
   const respOption: EChartsOption = base({
@@ -107,8 +121,13 @@ export function Subscriptions() {
           <KpiCard label="Surveys per 100 appointments" value={v.ytd.appts ? `${Math.round((100 * v.ytd.surveys) / v.ytd.appts)}` : '—'} sub={`${v.ytd.surveys.toLocaleString('en-US')} surveys ÷ ${v.ytd.appts.toLocaleString('en-US')} appointments, FYTD`} />
         </div>
 
-        <Chart title={`Net subscriptions by week, FY${v.fy}`} option={option} height={300} ariaLabel={`Net HomeCare+ subscriptions by fiscal week, online and in store, FW1 to FW${v.lastFw}`}
-          table={{ columns: ['Week', 'Net subscriptions', 'Online', 'In store', 'Revenue', 'Completed appointments', 'Surveys', 'LTR %'], rows: r.map((x) => [`FW${x.fw}`, x.subs, x.online, x.instore, Math.round(x.revenue), x.appts, x.surveys, x.surveys ? Number(((100 * x.promoters) / x.surveys).toFixed(1)) : null]) }} />
+        {v.live && <PaceLine s={v.live} />}
+
+        <Chart title={`Net subscriptions by week, FY${v.fy}`} option={option} height={320}
+          ariaLabel={`Net HomeCare+ subscriptions by fiscal week, online and in store, FW1 to FW${v.lastFw}, with the ${avgName.toLowerCase()}; ${belowCount} completed weeks below it`}
+          actions={<Segmented label="Average" value={avgMode} onChange={setAvgMode} options={[{ value: 'fytd', label: 'Average to date' }, { value: 'rolling', label: '4-week' }]} />}
+          table={{ columns: ['Week', 'Net subscriptions', 'Online', 'In store', avgName, 'Below average', 'Revenue', 'Completed appointments', 'Surveys', 'LTR %'], rows: r.map((x, i) => [`FW${x.fw}${avg[i].partial ? ' (to date)' : ''}`, x.subs, x.online, x.instore, avg[i].avg === null ? null : Math.round(avg[i].avg!), avg[i].below ? 'Yes' : '', Math.round(x.revenue), x.appts, x.surveys, x.surveys ? Number(((100 * x.promoters) / x.surveys).toFixed(1)) : null]) }} />
+        <p className="-mt-1 text-xs text-muted">Red bars: weeks below the {avgName.toLowerCase()} ({belowCount} of {avg.filter((a) => !a.partial).length} completed weeks). {avgMode === 'fytd' ? 'The line is the average of all completed weeks up to each week.' : 'The line is the average of the last 4 completed weeks.'} The week in progress is faded and judged by its projected total; it never moves the line.</p>
 
         <Card title={`Most in-store subscriptions · ${winLabel}`} actions={<Segmented label="Window" value={win} onChange={setWin} options={[{ value: 'week', label: `FW${v.lastFw}` }, { value: '4', label: '4 weeks' }, { value: 'fytd', label: 'FYTD' }]} />}>
           <DataTable rows={top} columns={cols} getRowId={(x) => x.storeNo} exportName={`In-store_subscriptions_${winLabel.replace(/[^\w-]+/g, '_')}`} maxHeight={420} initialSort={[{ id: 'instore', desc: true }]} empty="No in-store subscriptions in this window." />

@@ -6,7 +6,7 @@ import { countsForLtr } from '@/domain/survey';
 import { storeLabel } from '@/domain/geo';
 import { ltrSummary, type LtrSummary } from '@/lib/ltr';
 import type { SurveyRecord } from '@/domain/types';
-import { subsPulse, type SubsPulse, type SubsGeo } from '@/analytics/subscriptions';
+import { paceText, subsPulse, type SubsPulse, type SubsGeo } from '@/analytics/subscriptions';
 
 export interface PulseFacts {
   date: ISODate;
@@ -82,7 +82,8 @@ export function pulseFacts(ds: Dataset, date: ISODate, benchmark = 93, fyStart?:
     numbers.push(subs.fw, subs.fw - 1, subs.days, subs.wtd.subs, subs.wtd.instore, subs.wtd.online, subs.priorWeekFull.subs, subs.priorWeekFull.instore,
       ...(subs.period ? [subs.period.subs, subs.period.instore, subs.period.online] : []), ...(sp ? [sp.subs, sp.instore, Math.abs(subs.wtd.subs - sp.subs)] : []),
       ...(sp && sp.subs ? [Math.round((100 * (subs.wtd.subs - sp.subs)) / sp.subs), Math.abs(Math.round((100 * (subs.wtd.subs - sp.subs)) / sp.subs))] : []),
-      ...subs.topInstore.flatMap((t) => [t.instore, Number(t.storeNo)]));
+      ...subs.topInstore.flatMap((t) => [t.instore, Number(t.storeNo)]),
+      subs.pace.projected, subs.pace.priorTotal, subs.pace.needed, ...(subs.pace.perDay !== null ? [subs.pace.perDay] : []), subs.pace.priorWeek);
   }
   return { ...f, numbers };
 }
@@ -123,6 +124,7 @@ export function subsSentence(s: SubsPulse | null, periodLabel: string): string |
     ? `, ${s.wtd.subs >= sp.subs ? 'up' : 'down'} ${Math.abs(s.wtd.subs - sp.subs)}${sp.subs ? ` (${Math.abs(Math.round((100 * (s.wtd.subs - sp.subs)) / sp.subs))}%)` : ''} from ${sp.subs} at the same point last week`
     : `; FW${s.fw - 1} finished with ${s.priorWeekFull.subs}`;
   parts.push(`FW${s.fw} to date: ${s.wtd.subs} (${s.wtd.instore} in store) after ${s.days} day${s.days === 1 ? '' : 's'}${cmp}.`);
+  parts.push(paceText(s.pace, s.fw));
   if (s.topInstore.length) parts.push(`Most in-store sales: ${s.topInstore.slice(0, 2).map((t) => `store ${Number(t.storeNo)} with ${t.instore}`).join(' and ')}.`);
   return parts.join(' ').replace('Subscriptions: FW', 'Subscriptions: FW');
 }

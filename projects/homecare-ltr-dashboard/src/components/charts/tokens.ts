@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 
 export interface ChartTokens {
   ink: string; muted: string; border: string; surface: string; surface2: string; grid: string;
-  calls: string; surveys: string; surveysDark: string; surveysSoft: string; callsSoft: string; neutral: string; dark: boolean;
+  calls: string; surveys: string; surveysDark: string; surveysSoft: string; callsSoft: string; neutral: string;
+  /** below-average / alert marks (matches the slide's #C00000 in light mode) and a lighter companion for a stacked segment */
+  alert: string; alertSoft: string; dark: boolean;
 }
 
 function read(): ChartTokens {
@@ -19,6 +21,8 @@ function read(): ChartTokens {
     surveysSoft: dark ? '#5a3417' : '#F6C9A0',
     callsSoft: dark ? '#1c3a63' : '#C9DAF0',
     neutral: dark ? '#3a4a66' : '#C3CAD5',
+    alert: dark ? '#F0605A' : '#C00000',
+    alertSoft: dark ? '#8C3330' : '#EE9A96',
     dark,
   };
 }

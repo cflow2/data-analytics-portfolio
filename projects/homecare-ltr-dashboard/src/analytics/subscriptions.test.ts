@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SubscriptionSnapshot, SubscriptionWeek, SurveyRecord } from '@/domain/types';
-import { storeShort, subsLtrInsights, subsPulse, topInstoreStores, weeklySubs } from './subscriptions';
+import { averageLine, paceText, storeShort, subsLtrInsights, subsPace, subsPulse, topInstoreStores, weeklySubs } from './subscriptions';
 
 const wk = (storeNo: string, fw: number, subs: number, instore: number, extra: Partial<SubscriptionWeek> = {}): SubscriptionWeek => ({
   id: `2026:${fw}:${storeNo}`, fy: 2026, fw, storeNo, storeName: `LOWE'S OF TOWN ${storeNo}, TX`, storeSet: 'National Stores', division: storeNo < '0200' ? 'WEST' : 'SOUTH',
@@ -75,5 +75,37 @@ describe('subscriptions vs LTR', () => {
     expect(r.followUpRequired.b).toEqual({ n: 30, ltr: 90 });
     expect(r.followUpRequired.diff).toBeCloseTo(-30, 9);
     expect(r.regions.map((x) => x.region)).toEqual(['R5', 'R2']);
+  });
+});
+
+describe('pace vs last week', () => {
+  it('follows last week\'s shape when the export from 7 days earlier is loaded', () => {
+    const p = subsPulse(snaps, weeks, '2026-11-24', '2026-11-24')!.pace;
+    expect(p).toMatchObject({ priorWeek: 42, priorTotal: 50, projected: 67, method: 'last-week', status: 'ahead', beaten: false, needed: 31, perDay: 11, daysLeft: 3 });
+    expect(paceText(p, 43)).toBe("On pace to beat FW42's 50: projected 67. Needs 31 more to beat it, about 11 a day.");
+  });
+  it('falls back to straight-line, and says when last week is already beaten', () => {
+    const p = subsPace(43, 4, 20, 50, null);
+    expect(p).toMatchObject({ projected: 35, method: 'straight-line', status: 'behind' });
+    expect(paceText(p, 43)).toMatch(/^Behind pace for FW42's 50: projected 35 \(straight-line\)\./);
+    const done = subsPace(43, 5, 60, 50, 40);
+    expect(done).toMatchObject({ beaten: true, status: 'ahead', needed: 0 });
+    expect(paceText(done, 43)).toBe("FW43 has already passed FW42's 50.");
+    expect(subsPace(43, 7, 20, 50, null).perDay).toBeNull();
+  });
+});
+
+describe('average line', () => {
+  const rows = [{ fw: 1, subs: 10 }, { fw: 2, subs: 20 }, { fw: 3, subs: 30 }, { fw: 4, subs: 12 }, { fw: 5, subs: 5 }];
+  it('FYTD mean of completed weeks; the week in progress is judged by its projection', () => {
+    const a = averageLine(rows, 5, 'fytd', 18);
+    expect(a.map((x) => x.avg)).toEqual([10, 15, 20, 18, 18]);
+    expect(a.map((x) => x.below)).toEqual([false, false, false, true, false]);
+    expect(a[4].partial).toBe(true);
+  });
+  it('4-week rolling mean', () => {
+    const a = averageLine([...rows.slice(0, 4), { fw: 5, subs: 40 }], null, 'rolling');
+    expect(a[4].avg).toBe((20 + 30 + 12 + 40) / 4);
+    expect(a.map((x) => x.below)).toEqual([false, false, false, true, false]);
   });
 });

@@ -121,6 +121,7 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   await page.goto(url + '#/subscriptions'); await page.waitForTimeout(800);
   const subsText = await main();
   check('Subscriptions screen: weekly chart, top in-store stores, LTR relationships', /Net subscriptions by week/.test(subsText) && /Most in-store subscriptions/.test(subsText) && /Weeks with a follow-up required score lower/.test(subsText));
+  check('Pace vs last week shown on the Subscriptions screen and in the Pulse; red bars below the average', /(On pace to (beat|match)|Behind pace for|has already passed) FW40/.test(subsText) && /Red bars: weeks below the average to date/.test(subsText) && /(On pace to (beat|match)|Behind pace for|has already passed) FW40/.test(pulse));
   await page.goto(url + '#/pulse'); await page.waitForTimeout(400);
   check('Daily Pulse script is built from surveys (no call counts)', /surveys? came in/.test(pulse) && !/customer calls?|cancellation calls?/i.test(pulse), pulse.slice(0, 120).replace(/\n/g, ' '));
 

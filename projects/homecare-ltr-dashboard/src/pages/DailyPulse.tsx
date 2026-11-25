@@ -10,6 +10,7 @@ import { copyText } from '@/data/export';
 import { useSettings } from '@/state/settings';
 import { useFilters } from '@/state/filters';
 import type { PulseFacts } from '@/writing/pulse';
+import { PaceLine } from '@/components/subs/PaceLine';
 import { Link } from 'react-router';
 import { useUi } from '@/state/ui';
 import { PageGate } from '@/components/ui/PageGate';
@@ -138,8 +139,10 @@ function SubsCard({ f }: { f: PulseFacts }) {
         <div><div className="text-xs text-muted">Most in-store sales, FW{s.fw}</div>
           {s.topInstore.length ? <ol className="text-xs">{s.topInstore.slice(0, 3).map((t) => <li key={t.storeNo} className="flex justify-between gap-2"><span className="truncate">{t.label}</span><span>{t.instore}</span></li>)}</ol> : <p className="text-xs text-muted">None yet.</p>}</div>
       </div>
+      <PaceLine s={s} />
       {s.stale && <p className="mt-2 text-xs text-surveys">The latest subscription export covers through {s.snap.through}, not {f.to}.</p>}
       <p className="mt-2 text-xs text-muted">Net of cancellations. Data through {s.snap.through} (export {s.snap.id.replace('T', ' ').slice(0, 16)}).</p>
     </Card>
   );
 }
+
