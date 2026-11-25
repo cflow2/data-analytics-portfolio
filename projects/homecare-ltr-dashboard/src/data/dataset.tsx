@@ -4,11 +4,15 @@ import { useLive } from '@/hooks/useLive';
 import { DEFAULT_TAXONOMY, type ThemeDef } from '@/domain/taxonomy';
 import { normalizeApptId } from '@/ingest/normalize';
 import type {
-  AttributeWeekly, FollowUpRecord, ImportedFile, LeadershipQuestion, StoreRecord, SurveyRecord, ThemeTag, WeekMeta,
+  AttributeWeekly, FollowUpRecord, ImportedFile, LeadershipQuestion, StoreRecord, SubscriptionSnapshot, SubscriptionWeek, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
 export interface Dataset {
   surveys: SurveyRecord[];
+  /** HomeCare+ subscriptions and completed appointments by store and week (latest export) */
+  subscriptionWeeks: SubscriptionWeek[];
+  /** one per subscription export, for day-over-day change */
+  subscriptionSnapshots: SubscriptionSnapshot[];
   /** every associate in the appointment file, sorted */
   associates: string[];
   followups: FollowUpRecord[];
@@ -28,8 +32,8 @@ const Ctx = createContext<DatasetState>({ data: undefined, loading: true, error:
 /** Loads the whole (local, modest-size) dataset once and keeps it live; screens compute from memory. */
 export function DatasetProvider({ children }: { children: ReactNode }) {
   const q = useLive(async () => {
-    const [surveys, appointments, followups, stores, tagList, attributeWeekly, weeks, files, tax, questions] = await Promise.all([
-      db.surveys.toArray(), db.appointments.toArray(), db.followups.toArray(), db.stores.toArray(), db.tags.toArray(),
+    const [surveys, appointments, subscriptionWeeks, subscriptionSnapshots, followups, stores, tagList, attributeWeekly, weeks, files, tax, questions] = await Promise.all([
+      db.surveys.toArray(), db.appointments.toArray(), db.subscriptionWeeks.toArray(), db.subscriptionSnapshots.toArray(), db.followups.toArray(), db.stores.toArray(), db.tags.toArray(),
       db.attributeWeekly.toArray(), db.weeks.toArray(), db.files.orderBy('importedAt').reverse().toArray(),
       db.kv.get('taxonomy'), db.questions.toArray(),
     ]);
@@ -37,7 +41,7 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
     // RedVest Associate joined by Appointment ID (the appointment file can be loaded before or after the Tracker).
     const assoc = new Map(appointments.map((a) => [a.id, a.associate]));
     if (assoc.size) for (const s of surveys) { const a = s.appointmentId ? assoc.get(normalizeApptId(s.appointmentId)) : undefined; if (a) s.associate = a; }
-    return { surveys, associates: [...new Set(appointments.map((a) => a.associate))].sort(), followups, stores, tagList, attributeWeekly, weeks, files, taxonomy, questions };
+    return { surveys, subscriptionWeeks, subscriptionSnapshots, associates: [...new Set(appointments.map((a) => a.associate))].sort(), followups, stores, tagList, attributeWeekly, weeks, files, taxonomy, questions };
   }, []);
   const data = useMemo<Dataset | undefined>(() => q.data && {
     ...q.data,

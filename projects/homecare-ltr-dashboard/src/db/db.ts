@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
-  SurveyRecord, AppointmentRecord, FollowUpRecord, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
+  SurveyRecord, AppointmentRecord, FollowUpRecord, SubscriptionWeek, SubscriptionSnapshot, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
   ImportedFile, WeekMeta, LeadershipQuestion, KV,
 } from '@/domain/types';
 
@@ -9,6 +9,10 @@ export class HomeCareDB extends Dexie {
   followups!: EntityTable<FollowUpRecord, 'id'>;
   /** Appointment ID → RedVest Associate (from the appointment file) */
   appointments!: EntityTable<AppointmentRecord, 'id'>;
+  /** HomeCare+ subscriptions and completed appointments by store and fiscal week (latest export) */
+  subscriptionWeeks!: EntityTable<SubscriptionWeek, 'id'>;
+  /** one per subscription export: current/prior week by store, for “yesterday” and same-point-last-week */
+  subscriptionSnapshots!: EntityTable<SubscriptionSnapshot, 'id'>;
   attributeWeekly!: EntityTable<AttributeWeekly, 'id'>;
   stores!: EntityTable<StoreRecord, 'storeNo'>;
   tags!: EntityTable<ThemeTag, 'recordId'>;
@@ -49,13 +53,15 @@ export class HomeCareDB extends Dexie {
     });
     // v3: appointment file (associate filter)
     this.version(3).stores({ appointments: 'id, associate, storeNo, fw, jobId' });
+    // v4: subscription exports
+    this.version(4).stores({ subscriptionWeeks: 'id, fy, fw, storeNo, region', subscriptionSnapshots: 'id, through, fw' });
   }
 }
 
 export const db = new HomeCareDB();
 
 export const DATA_TABLES = [
-  'surveys', 'appointments', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
+  'surveys', 'appointments', 'subscriptionWeeks', 'subscriptionSnapshots', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
   'weeks', 'questions', 'kv',
 ] as const;
 export type DataTable = (typeof DATA_TABLES)[number];

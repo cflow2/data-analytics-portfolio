@@ -9,7 +9,7 @@ import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord, SurveySource,
+  AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, SubscriptionSnapshot, SubscriptionWeek, OriginalText, StoreRecord, SurveyRecord, SurveySource,
 } from '@/domain/types';
 import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
@@ -31,7 +31,8 @@ export function openBook(name: string, buffer: ArrayBuffer): Book {
     const rows = Papa.parse<unknown[]>(text, { skipEmptyLines: false }).data as unknown[][];
     return { names: ['CSV'], head: (_n, k) => rows.slice(0, k), rows: () => rows };
   }
-  const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', dense: true, cellDates: false, cellHTML: false, cellFormula: false, cellStyles: false });
+  // cellText/cellNF off: the app reads raw values only; formatting every cell as text took ~80% of the read on big exports.
+  const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', dense: true, cellDates: false, cellHTML: false, cellFormula: false, cellStyles: false, cellText: false, cellNF: false });
   const cache = new Map<string, unknown[][]>();
   const conv = (sn: string, range?: number) => {
     const ws = wb.Sheets[sn];
@@ -250,6 +251,59 @@ function buildFollowups(baseCtx: Ctx, rows: unknown[][], map: Record<string, num
   if (fqMismatch) r.warnings.push(`FQ column differs from the fiscal calendar on ${fqMismatch} row(s) (${fqExample[0]}). The calendar (quarter = ceil(FW ÷ 13)) was used.`);
   if (fpMismatch) r.warnings.push(`FP column differs from the fiscal calendar's month on ${fpMismatch} row(s). The calendar was used.`);
   return out;
+}
+
+/** Export timestamp in the file name ("data - 2026-11-25T102510.873.xlsx") → ISO date-time, if present. */
+export function exportStamp(name: string): { date: ISODate; iso: string } | null {
+  const m = /(\d{4})-(\d{2})-(\d{2})(?:T(\d{2})(\d{2})(\d{2}))?/.exec(name);
+  if (!m) return null;
+  return { date: `${m[1]}-${m[2]}-${m[3]}`, iso: `${m[1]}-${m[2]}-${m[3]}T${m[4] ?? '00'}:${m[5] ?? '00'}:${m[6] ?? '00'}` };
+}
+
+function buildSubscriptions(ctx: Ctx, rows: unknown[][], map: Record<string, number>, today: ISODate): { weeks: SubscriptionWeek[]; snapshot: SubscriptionSnapshot | null } {
+  const r = ctx.report;
+  const num = (row: unknown[], k: string) => parseNumber(get(row, map, k)) ?? 0;
+  const stamp = exportStamp(ctx.fileName);
+  const exportDate = stamp?.date ?? today;
+  const defaultFy = Number(exportDate.slice(0, 4));
+  const out = new Map<string, SubscriptionWeek>();
+  for (const row of rows) {
+    if (rowIsBlank(row)) continue;
+    const wk = /(\d{1,2})/.exec(cellText(get(row, map, 'week')));
+    const store = normalizeStoreNo(get(row, map, 'storeNo'));
+    if (!wk && /applied filters/i.test(row.map((c) => cellText(c)).join(' '))) continue; // Looker filter note
+    r.rowsRead++;
+    if (!wk) { drop(r, 'No fiscal week'); continue; }
+    if (!store) { drop(r, 'No store'); continue; }
+    const fw = Number(wk[1]);
+    if (fw < 1 || fw > 53) { drop(r, 'Fiscal week out of range'); continue; }
+    const fy = parseNumber(get(row, map, 'fy')) ?? defaultFy;
+    const id = `${fy}:${fw}:${store}`;
+    const rec: SubscriptionWeek = {
+      id, fy, fw, storeNo: store, storeName: cellText(get(row, map, 'storeName')), storeSet: cellText(get(row, map, 'storeSet')),
+      division: cellText(get(row, map, 'division')).toUpperCase(), region: normalizeRegion(cellText(get(row, map, 'region'))) || '',
+      district: cellText(get(row, map, 'district')).replace(/\.0+$/, ''),
+      subs: num(row, 'subs'), online: num(row, 'online'), instore: num(row, 'instore'), revenue: num(row, 'revenue'),
+      appts: num(row, 'appts'), regular: num(row, 'regular'), assessments: num(row, 'assessments'), followUps: num(row, 'followUps'),
+      exceptions: num(row, 'exceptions'), followUpRequired: num(row, 'followUpRequired'), sourceFile: ctx.fileName,
+    };
+    if (out.has(id)) { drop(r, 'Duplicate store-week row'); continue; }
+    out.set(id, rec);
+    r.weeks[fw] = (r.weeks[fw] ?? 0) + 1;
+    r.rowsKept++;
+  }
+  const weeks = [...out.values()];
+  if (!weeks.length) return { weeks, snapshot: null };
+  const fy = Math.max(...weeks.map((w) => w.fy));
+  const fw = Math.max(...weeks.filter((w) => w.fy === fy).map((w) => w.fw));
+  const pick = (f: number) => Object.fromEntries(weeks.filter((w) => w.fy === fy && w.fw === f && (w.subs || w.instore)).map((w) => [w.storeNo, [w.subs, w.instore] as [number, number]]));
+  const through = addDays(exportDate, -1);
+  const snapshot: SubscriptionSnapshot = { id: stamp?.iso ?? `${today}T00:00:00`, through, fy, fw, cur: pick(fw), prior: pick(fw - 1), sourceFile: ctx.fileName };
+  const sum = (m: Record<string, [number, number]>, i: 0 | 1) => Object.values(m).reduce((a, v) => a + v[i], 0);
+  (r.info ??= []).push(`FY${fy} FW1–FW${fw}: ${weeks.length.toLocaleString('en-US')} store-weeks, ${new Set(weeks.map((w) => w.storeNo)).size.toLocaleString('en-US')} stores. FW${fw} to date: ${sum(snapshot.cur, 0).toLocaleString('en-US')} net subscriptions (${sum(snapshot.cur, 1)} in store), treated as data through ${through}${stamp ? ' (the day before the export time in the file name)' : ' (yesterday; the file name has no export time)'}.`);
+  const neg = weeks.filter((w) => w.subs < 0).length;
+  if (neg) r.info!.push(`${neg} store-week(s) have negative net subscriptions (cancellations/refunds exceeded sales).`);
+  return { weeks, snapshot };
 }
 
 function buildAppointments(ctx: Ctx, rows: unknown[][], map: Record<string, number>): AppointmentRecord[] {
@@ -592,6 +646,7 @@ export function parseFile(req: ParseRequest): ParsedFile {
       case 'followup': result.followups = buildFollowups(ctx, body, cand.map); break;
       case 'store-map': result.stores = buildStores(ctx, body, cand.map); break;
       case 'appointments': result.appointments = buildAppointments(ctx, body, cand.map); break;
+      case 'subscriptions': { const s = buildSubscriptions(ctx, body, cand.map, req.today ?? todayISO()); result.subscriptionWeeks = s.weeks; result.subscriptionSnapshot = s.snapshot; break; }
       case 'medallia-analytics': result.attributeWeekly = buildAnalyticsLong(ctx, body, cand.map); break;
     }
     if (report.rowsKept === 0) report.warnings.push('No usable rows were found under the header row.');

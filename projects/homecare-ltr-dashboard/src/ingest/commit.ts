@@ -210,6 +210,13 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
     report.unmappedStores = (await database.stores.toArray()).filter((s) => !s.district).map((s) => s.storeNo).sort();
   }
 
+  if (b.subscriptionWeeks?.length) {
+    // The export is year-to-date: it replaces the stored weeks for its fiscal year.
+    const fys = [...new Set(b.subscriptionWeeks.map((w) => w.fy))];
+    await database.subscriptionWeeks.where('fy').anyOf(fys).filter((w) => !w.demo).delete();
+    await database.subscriptionWeeks.bulkPut(b.subscriptionWeeks);
+    if (b.subscriptionSnapshot) await database.subscriptionSnapshots.put(b.subscriptionSnapshot);
+  }
   if (b.appointments?.length) {
     const appts = b.appointments;
     await database.appointments.bulkPut(appts);

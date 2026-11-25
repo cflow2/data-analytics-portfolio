@@ -8,7 +8,7 @@ export type TagSource = 'AI' | 'Rule' | 'Manual' | 'Demo';
 export type FollowUpStatus = 'Documented' | 'Email only' | 'Missing';
 export type FileKind =
   | 'tracker' | 'medallia-responses' | 'medallia-analytics' | 'commentary'
-  | 'followup' | 'store-map' | 'appointments' | 'demo';
+  | 'followup' | 'store-map' | 'appointments' | 'subscriptions' | 'demo';
 
 export type AttributeKey =
   | 'value' | 'scheduling' | 'quality' | 'timeToAppt' | 'processPrior'
@@ -40,6 +40,47 @@ export interface SurveyRecord {
   associate?: string;
   sourceFile: string;
   redactionUncertain?: boolean;
+  demo?: boolean;
+}
+
+/** One store's HomeCare+ sales and completed appointments for one fiscal week (subscription export). Net = after cancellations. */
+export interface SubscriptionWeek {
+  id: string; // `${fy}:${fw}:${storeNo}`
+  fy: number;
+  fw: number;
+  storeNo: string;
+  storeName: string;
+  /** National Stores / Test Stores service members; Selling Stores sell only */
+  storeSet: string;
+  division: string;
+  region: string;
+  district: string;
+  subs: number;
+  online: number;
+  instore: number;
+  revenue: number;
+  appts: number;
+  regular: number;
+  assessments: number;
+  followUps: number;
+  exceptions: number;
+  followUpRequired: number;
+  sourceFile: string;
+  demo?: boolean;
+}
+
+/** What one subscription export said about the current and prior week, so day-over-day change can be worked out. */
+export interface SubscriptionSnapshot {
+  id: string; // export timestamp (ISO) or import time
+  /** last day the export covers (export date − 1 day) */
+  through: ISODate;
+  fy: number;
+  /** latest week in the export (in progress) */
+  fw: number;
+  /** storeNo → [subs, instore] for the latest week, and the same for the week before */
+  cur: Record<string, [number, number]>;
+  prior: Record<string, [number, number]>;
+  sourceFile: string;
   demo?: boolean;
 }
 

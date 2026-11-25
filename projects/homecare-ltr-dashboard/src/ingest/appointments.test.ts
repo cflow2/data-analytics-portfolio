@@ -67,3 +67,25 @@ describe('division and associate filters', () => {
     expect(new Set(mine.map((s) => s.storeNo)).size).toBe(1);
   });
 });
+
+describe('subscription export', () => {
+  it('demo export parses: store × week, filter note skipped, snapshot through the day before the export', async () => {
+    const d = generateDemoData();
+    const f = demoFiles(d).find((x) => /^data - /.test(x.name))!;
+    const p = parseFile(req(f.name, f.data));
+    expect(p.candidate).toMatchObject({ kind: 'subscriptions', missing: [] });
+    const b = p.build!;
+    expect(b.subscriptionWeeks!.length).toBe(d.subscriptionWeeks.length);
+    expect(b.report.dropped).toEqual({});
+    expect(b.subscriptionSnapshot).toMatchObject({ through: '2026-11-08', fw: 41, id: '2026-11-09T10:15:00' });
+    const last = d.subscriptionSnapshots.find((s) => s.through === '2026-11-08')!;
+    const total = (m: Record<string, [number, number]>) => Object.values(m).reduce((a, v) => a + v[0], 0);
+    expect(total(b.subscriptionSnapshot!.cur)).toBe(total(last.cur));
+    expect(total(b.subscriptionSnapshot!.prior)).toBe(total(last.prior));
+    const db = new HomeCareDB('subs-commit');
+    await commitParsed(p, { database: db });
+    await commitParsed(p, { database: db });
+    expect(await db.subscriptionWeeks.count()).toBe(d.subscriptionWeeks.length);
+    expect(await db.subscriptionSnapshots.count()).toBe(1);
+  }, 60_000);
+});

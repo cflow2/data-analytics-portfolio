@@ -13,11 +13,12 @@ import { ReviewQueue } from '@/pages/ReviewQueue';
 import { Ask } from '@/pages/Ask';
 import { DailyPulse } from '@/pages/DailyPulse';
 import { LtrSlide } from '@/pages/LtrSlide';
+import { Subscriptions } from '@/pages/Subscriptions';
 import { SCREENS } from '@/screens';
 
 const BUILT: Record<string, () => JSX.Element> = {
   '/': CommandCenter, '/trends': LtrTrends, '/regions': RegionalDrilldown, '/detractors': Detractors, '/attributes': Attributes,
-  '/voc': VocThemes, '/review': ReviewQueue, '/ask': Ask, '/slide': LtrSlide, '/pulse': DailyPulse,
+  '/voc': VocThemes, '/review': ReviewQueue, '/ask': Ask, '/slide': LtrSlide, '/subscriptions': Subscriptions, '/pulse': DailyPulse,
   '/data': DataManager, '/settings': Settings,
 };
 

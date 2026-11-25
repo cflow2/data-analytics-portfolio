@@ -8,6 +8,9 @@ import { verifyNumbers } from '@/writing/verify';
 import { addDays, dayName, monthDay, todayISO, type ISODate } from '@/lib/dates';
 import { copyText } from '@/data/export';
 import { useSettings } from '@/state/settings';
+import { useFilters } from '@/state/filters';
+import type { PulseFacts } from '@/writing/pulse';
+import { Link } from 'react-router';
 import { useUi } from '@/state/ui';
 import { PageGate } from '@/components/ui/PageGate';
 import { Button, Card, PageHeader, cx } from '@/components/ui/primitives';
@@ -23,7 +26,7 @@ export function DailyPulse() {
   const fyStart = useSettings((s) => s.fyStart);
   // Default: the day after the latest survey (so "yesterday" has data), capped at today.
   const defaultDate = useMemo(() => {
-    const latest = ds?.surveys.reduce<ISODate | null>((m, c) => (!m || c.date > m ? c.date : m), null);
+    const latest = [...(ds?.surveys.map((c) => c.date) ?? []), ...(ds?.subscriptionSnapshots.map((s) => s.through) ?? [])].reduce<ISODate | null>((m, x) => (!m || x > m ? x : m), null);
     const t = todayISO();
     return latest ? (addDays(latest, 1) < t ? addDays(latest, 1) : t) : t;
   }, [ds]);
@@ -34,7 +37,9 @@ export function DailyPulse() {
   const [copied, setCopied] = useState(false);
   useEffect(() => { if (!big) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setBig(false); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [big]);
 
-  const f = useMemo(() => (ds ? pulseFacts(ds, d, benchmark, fyStart) : null), [ds, d, benchmark, fyStart]);
+  const [filters] = useFilters();
+  const geo = useMemo(() => ({ division: filters.division, region: filters.region, district: filters.district, store: filters.store }), [filters.division, filters.region, filters.district, filters.store]);
+  const f = useMemo(() => (ds ? pulseFacts(ds, d, benchmark, fyStart, geo) : null), [ds, d, benchmark, fyStart, geo]);
   if (!ds || !f) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading} error={error} empty={false}>{null}</PageGate></>;
   const generated = pulseScript(f);
   const script = saved.data ?? generated;
@@ -84,6 +89,8 @@ export function DailyPulse() {
             </Card>
           </div>
 
+          <SubsCard f={f} />
+
           <Card title={`60-second script · ${words} words (~${Math.round(words / 2.5)} s)`} actions={!presentation && (
             <>
               {saved.data !== null && <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => void db.kv.delete(KEY(d))}>Regenerate</Button>}
@@ -106,5 +113,33 @@ export function DailyPulse() {
         </div>
       )}
     </>
+  );
+}
+
+/** Subscriptions sold in the pulse period, fiscal week to date and vs the same point last week (from the subscription exports). */
+function SubsCard({ f }: { f: PulseFacts }) {
+  const s = f.subs;
+  if (!s) return (
+    <Card title="Subscriptions">
+      <p className="text-sm text-muted">No subscription export covers {f.periodLabel}. Upload the daily HomeCare+ subscription export (store × week, YTD) on the Data Manager. Upload it every morning: “yesterday” is worked out from the difference between consecutive exports.</p>
+    </Card>
+  );
+  const sp = s.samePointLastWeek;
+  const delta = sp ? s.wtd.subs - sp.subs : null;
+  return (
+    <Card title={`Subscriptions · FW${s.fw} day ${s.days}`} actions={<Link to="/subscriptions" className="text-xs font-medium text-calls underline">Subscriptions screen</Link>}>
+      <div className="grid grid-cols-4 gap-3 text-sm tnum">
+        <div><div className="text-xs text-muted">{f.periodLabel.startsWith('the weekend') ? 'Over the weekend' : 'Yesterday'}</div>
+          {s.period ? <><div className="font-display text-2xl font-semibold">{s.period.subs.toLocaleString('en-US')}</div><div className="text-xs text-muted">{s.period.instore} in store · {s.period.online} online</div></> : <p className="text-xs text-surveys">{s.periodNote}</p>}</div>
+        <div><div className="text-xs text-muted">FW{s.fw} to date</div><div className="font-display text-2xl font-semibold">{s.wtd.subs.toLocaleString('en-US')}</div><div className="text-xs text-muted">{s.wtd.instore} in store · {s.wtd.online} online</div></div>
+        <div><div className="text-xs text-muted">Same point last week</div>
+          {sp ? <><div className="font-display text-2xl font-semibold">{sp.subs.toLocaleString('en-US')}</div><div className={cx('text-xs', delta! < 0 ? 'text-surveys' : 'text-grow')}>{delta! >= 0 ? '▲' : '▼'} {Math.abs(delta!)}{sp.subs ? ` (${Math.abs(Math.round((100 * delta!) / sp.subs))}%)` : ''} this week</div></>
+            : <p className="text-xs text-muted">Needs the export from 7 days ago. FW{s.fw - 1} full week: {s.priorWeekFull.subs.toLocaleString('en-US')} ({s.priorWeekFull.instore} in store).</p>}</div>
+        <div><div className="text-xs text-muted">Most in-store sales, FW{s.fw}</div>
+          {s.topInstore.length ? <ol className="text-xs">{s.topInstore.slice(0, 3).map((t) => <li key={t.storeNo} className="flex justify-between gap-2"><span className="truncate">{t.label}</span><span>{t.instore}</span></li>)}</ol> : <p className="text-xs text-muted">None yet.</p>}</div>
+      </div>
+      {s.stale && <p className="mt-2 text-xs text-surveys">The latest subscription export covers through {s.snap.through}, not {f.to}.</p>}
+      <p className="mt-2 text-xs text-muted">Net of cancellations. Data through {s.snap.through} (export {s.snap.id.replace('T', ' ').slice(0, 16)}).</p>
+    </Card>
   );
 }

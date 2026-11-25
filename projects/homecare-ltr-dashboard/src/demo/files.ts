@@ -127,7 +127,18 @@ export function demoFiles(d: DemoData = generateDemoData()): DemoFile[] {
       ...d.appointments.filter((a) => (a.fw ?? 0) >= 37).map((a) => [a.id, a.jobId, a.associate, Number(a.storeNo), dateCell(a.date!)])]]]),
   });
 
-  // 6. Detractor follow-up file for FW40
+  // 6. Subscription export (Looker-style, store × week, YTD) as exported on the morning of Mon Nov 9
+  files.push({
+    name: 'data - 2026-11-09T101500.000.xlsx',
+    data: book([['Export', [
+      ['Store Set', 'Division', 'Division Name', 'Region', 'Region Name', 'District', 'Store', 'Store Name', 'Fiscal Year', 'Quarter', 'Month', 'Week', 'Net MLRHC+ Revenue', 'Net MLRHC+ Subscriptions', 'Net MLRHC+ Online Revenue', 'Net MLRHC+ Online Subscriptions', 'Net MLRHC+ Store Revenue', 'Net MLRHC+ Store Subscriptions', 'Completed Appointments', 'Regular', 'Assessments', 'Follow UP', 'Exceptions', 'Follow Up Required'],
+      ...d.subscriptionWeeks.map((w) => [w.storeSet, '', w.division, Number(w.region.slice(1)), 'DEMO', w.district, Number(w.storeNo), w.storeName, w.fy, `Q${Math.ceil(w.fw / 13)}`, '', `FW${String(w.fw).padStart(2, '0')}`,
+        w.revenue, w.subs, w.online * 99, w.online, w.instore * 99, w.instore, w.appts, w.regular, w.assessments, w.followUps, w.exceptions, w.followUpRequired]),
+      ['Applied filters:\nFiscal_Year is 2026\nSubscriptions is Total'],
+    ]]]),
+  });
+
+  // 7. Detractor follow-up file for FW40
   files.push({
     name: 'FW40_DEMO.xlsx',
     data: book([['FW40', [['LL', 'Score', 'Comment', 'Store', 'SM', 'Insights', 'Region', 'FW', 'FQ', 'FP'],

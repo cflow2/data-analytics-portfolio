@@ -57,6 +57,9 @@ export interface BuildResult {
   report: ValidationReport;
   /** Tracker only: the region map pictures from the “LTR Region Map” sheet */
   regionMap?: import('./regionMap').RegionMapAsset | null;
+  /** Subscription export: store × week sales and completed appointments, and the export's snapshot for day-over-day change */
+  subscriptionWeeks?: import('@/domain/types').SubscriptionWeek[];
+  subscriptionSnapshot?: import('@/domain/types').SubscriptionSnapshot | null;
   /** Appointment file: Appointment ID → RedVest Associate */
   appointments?: import('@/domain/types').AppointmentRecord[];
   /** Medallia Analytics only: the whole-range LTR (e.g. a fiscal-year-to-date view) */

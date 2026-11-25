@@ -6,6 +6,7 @@ import { countsForLtr } from '@/domain/survey';
 import { storeLabel } from '@/domain/geo';
 import { ltrSummary, type LtrSummary } from '@/lib/ltr';
 import type { SurveyRecord } from '@/domain/types';
+import { subsPulse, type SubsPulse, type SubsGeo } from '@/analytics/subscriptions';
 
 export interface PulseFacts {
   date: ISODate;
@@ -25,6 +26,8 @@ export interface PulseFacts {
   wtd: { fw: number; s: LtrSummary; allowed: number };
   benchmark: number;
   watch: string;
+  /** subscriptions from the latest subscription export covering the period; null when none is loaded */
+  subs: SubsPulse | null;
   hasData: boolean;
   numbers: number[];
 }
@@ -42,7 +45,7 @@ function countBy<T>(xs: T[], key: (x: T) => string): { key: string; count: numbe
   return [...m].map(([k, count]) => ({ key: k, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-export function pulseFacts(ds: Dataset, date: ISODate, benchmark = 93, fyStart?: ISODate): PulseFacts {
+export function pulseFacts(ds: Dataset, date: ISODate, benchmark = 93, fyStart?: ISODate, geo: SubsGeo = {}): PulseFacts {
   const p = pulsePeriod(date);
   const inP = (d: ISODate) => d >= p.from && d <= p.to;
   const tname = (id: string) => ds.taxonomy.find((t) => t.id === id)?.name ?? id;
@@ -64,25 +67,34 @@ export function pulseFacts(ds: Dataset, date: ISODate, benchmark = 93, fyStart?:
   else if (zeroSix) watch = `The ${zeroSix.ltr} at ${storeLabel(zeroSix.storeNo, ds.stores)}: make sure the store follows up within 48 hours.`;
   else if (byRegion) watch = `${byRegion.key} had ${byRegion.count} scores of 0–8.`;
   else if (wtdS.pct !== null && wtdS.pct < benchmark) watch = `FW${fw} is at ${wtdS.pct.toFixed(1)}% so far, below ${benchmark}.`;
+  const subs = subsPulse(ds.subscriptionSnapshots ?? [], ds.subscriptionWeeks ?? [], p.from, p.to, geo, fyStart);
   const f: Omit<PulseFacts, 'numbers'> = {
     date, from: p.from, to: p.to, periodLabel: p.label, surveys, period: ltrSummary(surveys.map((s) => s.ltr)),
     comments: surveys.filter((s) => s.comment.trim()).length, topThemes,
     detractors: dets.map((s) => ({ s, store: storeLabel(s.storeNo, ds.stores), cause: ds.tags.get(s.id)?.primary && ds.tags.get(s.id)!.primary !== 'other' ? tname(ds.tags.get(s.id)!.primary) : null })),
-    damage, wtd, benchmark, watch, hasData: surveys.length > 0,
+    damage, wtd, benchmark, watch, subs, hasData: surveys.length > 0 || !!subs,
   };
   const numbers = [surveys.length, f.period.promoters, f.period.detractors, f.period.detractors0to6, f.comments, ...topThemes.map((x) => x.count), dets.length, ...dets.map((s) => s.ltr!),
     damage.length, fw, wtdS.n, wtdS.detractors, wtd.allowed, Math.max(0, wtd.allowed - wtdS.detractors), ...(wtdS.pct !== null ? [wtdS.pct] : []), ...(f.period.pct !== null ? [f.period.pct] : []),
     ...(byRegion ? [byRegion.count] : []), ...dets.map((s) => Number(s.storeNo)), benchmark, 48];
+  if (subs) {
+    const sp = subs.samePointLastWeek;
+    numbers.push(subs.fw, subs.fw - 1, subs.days, subs.wtd.subs, subs.wtd.instore, subs.wtd.online, subs.priorWeekFull.subs, subs.priorWeekFull.instore,
+      ...(subs.period ? [subs.period.subs, subs.period.instore, subs.period.online] : []), ...(sp ? [sp.subs, sp.instore, Math.abs(subs.wtd.subs - sp.subs)] : []),
+      ...(sp && sp.subs ? [Math.round((100 * (subs.wtd.subs - sp.subs)) / sp.subs), Math.abs(Math.round((100 * (subs.wtd.subs - sp.subs)) / sp.subs))] : []),
+      ...subs.topInstore.flatMap((t) => [t.instore, Number(t.storeNo)]));
+  }
   return { ...f, numbers };
 }
 
 /** ~60 seconds spoken (≈ 130–160 words). Store numbers only, never names. */
 export function pulseScript(f: PulseFacts): string {
-  if (!f.hasData) return `No surveys are loaded for ${f.periodLabel}.`;
+  if (!f.hasData) return `No surveys or subscriptions are loaded for ${f.periodLabel}.`;
   const lines: string[] = [`Good morning. Here’s the HomeCare+ pulse for ${f.periodLabel}.`];
   const n = f.surveys.length;
-  lines.push(`${n} survey${n === 1 ? '' : 's'} came in${f.period.pct !== null ? `, ${f.period.promoters} of them 9s and 10s (${f.period.pct.toFixed(1)}%)` : ''}${f.topThemes.length ? `; comments were mostly about ${f.topThemes.map((t) => `${t.key.toLowerCase()} (${t.count})`).join(', ')}` : ''}.`);
-  if (f.detractors.length) {
+  if (n === 0) lines.push('No surveys came in.');
+  else lines.push(`${n} survey${n === 1 ? '' : 's'} came in${f.period.pct !== null ? `, ${f.period.promoters} of them 9s and 10s (${f.period.pct.toFixed(1)}%)` : ''}${f.topThemes.length ? `; comments were mostly about ${f.topThemes.map((t) => `${t.key.toLowerCase()} (${t.count})`).join(', ')}` : ''}.`);
+  if (n === 0) { /* nothing to say about scores */ } else if (f.detractors.length) {
     const art = (x: number) => (x === 8 || x === 11 || x === 18 ? 'an' : 'a');
     const d = f.detractors.slice(0, 3).map((x) => `${art(x.s.ltr!)} ${x.s.ltr} at store ${x.s.storeNo}${x.cause ? ` about ${x.cause.toLowerCase()}` : ''}`);
     lines.push(`${f.detractors.length} scored 0 to 8: ${d.join('; ')}${f.detractors.length > 3 ? '; the rest are on the Detractors screen' : ''}.`);
@@ -93,6 +105,24 @@ export function pulseScript(f: PulseFacts): string {
     const left = w.allowed - w.s.detractors;
     lines.push(`FW${w.fw} so far: ${w.s.pct.toFixed(1)}% on ${w.s.n} surveys, ${w.s.pct >= f.benchmark ? 'at or above' : 'below'} ${f.benchmark}. ${w.s.detractors} scored 0 to 8 against ${w.allowed} allowed at ${f.benchmark}${left > 0 ? `, so ${left} to spare` : left === 0 ? ', with none to spare' : `, ${-left} over`}.`);
   }
+  const sub = subsSentence(f.subs, f.periodLabel);
+  if (sub) lines.push(sub);
   lines.push(`One thing to watch: ${f.watch}`);
   return lines.join(' ');
+}
+
+/** “We added 214 net subscriptions yesterday, 21 in store. FW43 to date: 662 (59 in store) after 4 days, vs 540 at the same point last week.” */
+export function subsSentence(s: SubsPulse | null, periodLabel: string): string | null {
+  if (!s) return null;
+  const parts: string[] = [];
+  const when = periodLabel.startsWith('the weekend') ? 'over the weekend' : 'yesterday';
+  if (s.period) parts.push(`Subscriptions: we added ${s.period.subs} net ${when}, ${s.period.instore} in store.`);
+  else parts.push('Subscriptions:');
+  const sp = s.samePointLastWeek;
+  const cmp = sp
+    ? `, ${s.wtd.subs >= sp.subs ? 'up' : 'down'} ${Math.abs(s.wtd.subs - sp.subs)}${sp.subs ? ` (${Math.abs(Math.round((100 * (s.wtd.subs - sp.subs)) / sp.subs))}%)` : ''} from ${sp.subs} at the same point last week`
+    : `; FW${s.fw - 1} finished with ${s.priorWeekFull.subs}`;
+  parts.push(`FW${s.fw} to date: ${s.wtd.subs} (${s.wtd.instore} in store) after ${s.days} day${s.days === 1 ? '' : 's'}${cmp}.`);
+  if (s.topInstore.length) parts.push(`Most in-store sales: ${s.topInstore.slice(0, 2).map((t) => `store ${Number(t.storeNo)} with ${t.instore}`).join(' and ')}.`);
+  return parts.join(' ').replace('Subscriptions: FW', 'Subscriptions: FW');
 }

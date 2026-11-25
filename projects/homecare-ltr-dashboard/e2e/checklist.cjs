@@ -32,7 +32,7 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   check('Single file opens from file://', (await page.title()).includes('HomeCare+'));
   // Empty states: with nothing loaded, every data screen names the files to upload.
   const emptyMissing = [];
-  for (const r of ['/', '/trends', '/regions', '/detractors', '/attributes', '/voc', '/slide', '/pulse', '/ask']) {
+  for (const r of ['/', '/trends', '/regions', '/detractors', '/attributes', '/subscriptions', '/voc', '/slide', '/pulse', '/ask']) {
     await page.goto(url + '#' + r); await page.waitForTimeout(500);
     const body = await main();
     if (!/Go to Data Manager|Upload these files|Nothing is loaded|No data/i.test(body) || /This screen hit a problem/.test(body)) emptyMissing.push(r);
@@ -117,6 +117,11 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   // 5. Daily Pulse is built from surveys
   await page.goto(url + '#/pulse'); await page.waitForTimeout(600);
   const pulse = (await main()) + (await page.inputValue('textarea[aria-label="Pulse script"]'));
+  check('Daily Pulse includes subscriptions (weekend, week to date, same point last week)', /Subscriptions · FW41 day 2/.test(pulse) && /Same point last week/.test(pulse) && /Subscriptions: we added -?\d+ net over the weekend/.test(pulse), pulse.match(/Subscriptions:[^.]*\./)?.[0] ?? '');
+  await page.goto(url + '#/subscriptions'); await page.waitForTimeout(800);
+  const subsText = await main();
+  check('Subscriptions screen: weekly chart, top in-store stores, LTR relationships', /Net subscriptions by week/.test(subsText) && /Most in-store subscriptions/.test(subsText) && /Weeks with a follow-up required score lower/.test(subsText));
+  await page.goto(url + '#/pulse'); await page.waitForTimeout(400);
   check('Daily Pulse script is built from surveys (no call counts)', /surveys? came in/.test(pulse) && !/customer calls?|cancellation calls?/i.test(pulse), pulse.slice(0, 120).replace(/\n/g, ' '));
 
   // 5b. LTR slide: native combo + drivers charts, talk track with back pocket, iPad-safe parts, PNG at 3840×2160

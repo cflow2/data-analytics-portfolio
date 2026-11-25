@@ -75,6 +75,7 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 | Customer Commentary | header on row 2; `date, score, comment` | Fills comments on matching Tracker surveys. |
 | Detractor follow-up (`FW40.xlsx`, or the Tracker's `Detractors` tab) | `LL, Score, Comment, Store, SM, Insights, Region, FW, FQ, FP` (header on row 1) | Insights → **Documented** only when contact with the member is described (called, contacted, spoke, left a voicemail, “customer confirmed…”); emails, plans (“I will call…”, “store asked to contact…”) and internal reviews/coaching → **Email only**; blank → **Missing**; detractors absent from the file → **Missing**. Names in the SM column are redacted wherever they appear. FQ/FP are checked against the calendar. |
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
+| HomeCare+ subscription export (`data - <timestamp>.xlsx`, sheet *Export*) | `Store, Week, Net MLRHC+ Subscriptions, Net MLRHC+ Store Subscriptions` (+ online, revenue, store set, division, region, district, Completed Appointments, Regular, Assessments, Follow UP, Exceptions, Follow Up Required) | One row per store per fiscal week, year to date; the trailing "Applied filters" row is skipped. Each upload replaces that fiscal year's weeks **and saves a snapshot** of the current and prior week by store. The export time in the file name sets the snapshot's *data-through* date (the day before). Upload it every morning: yesterday's sales = this snapshot's week-to-date minus the previous one; "same point last week" = the snapshot from 7 days earlier. |
 | Appointment file (RedVest Associate) | `Appointment ID` + `Associate` required; `Job ID`, `Store #`, `Appointment date` optional (common names such as *Appt ID*, *Technician Name*, *Job #*, *Service Date* are recognised; otherwise map the columns once) | Links each survey to its associate by Appointment ID, whichever file is loaded first. The report says how many loaded surveys were linked. If one Appointment ID lists two associates, the first is kept and the conflict is reported. |
 
 Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, notes, headline or slide edits (exports still work; untagged records still get their first rule tags).
@@ -117,9 +118,19 @@ Every survey that scores 0–8 costs 100 ÷ n points of LTR (0.5 pts when n = 20
 
 **VOC Themes → Services members want added** ranks services outside the standard visit (tankless and gas water heaters, roof-vented dryer vents, second-story work, gutters, light fixtures, garage doors, detectors…) by how many members mention them. A mention only counts when the comment asks for the service or says it wasn't covered (or is tagged Service-add or Exclusions), so “they changed my HVAC filter” doesn't count. It shows asked-to-add vs told-not-covered, this week, % that still scored 9–10, and when it was last seen, for FYTD, 13 weeks or the week. Click a service for its comments; the table exports to CSV/Excel. The service list lives in `src/analytics/serviceRequests.ts`.
 
+## Subscriptions
+
+**Subscriptions** (Report) shows FYTD net subscriptions and the in-store share, the current week to date, completed appointments and surveys per 100 completed appointments; a weekly online / in-store chart; the stores with the most in-store subscriptions (this week, 4 weeks, FYTD; exportable); a store-set table (stores with no completed appointments sell but don't service); and **Subscriptions and LTR**:
+
+- LTR by quarter of stores ranked by in-store share (stores with ≥ 10 surveys), plus the same split *within* each region so region mix can't explain it.
+- LTR in store-weeks with a *Follow Up Required* (or an *Exception*) vs without.
+- By region: new subscriptions per completed appointment vs LTR (rank correlation).
+
+Each comparison says whether the gap is bigger than 2 standard errors ("bigger than chance alone would explain") or a hint. They are store-level patterns, not member-level proof. `src/analytics/subscriptions.ts`, tested in `subscriptions.test.ts`.
+
 ## Daily Pulse and Presentation mode
 
-- **Daily Pulse:** pick the meeting date (Monday covers the weekend). It shows the surveys that came in (share of 9–10, comment themes), every 0–8 score with store and theme, comments that mention damage or safety, the fiscal week so far against 93 (0–8 count vs the allowance), one thing to watch, and an editable ~60-second script with a large-type reading view. Every number in the script is checked against the data.
+- **Daily Pulse:** pick the meeting date (Monday covers the weekend). It shows the surveys that came in (share of 9–10, comment themes), every 0–8 score with store and theme, comments that mention damage or safety, the fiscal week so far against 93 (0–8 count vs the allowance), **subscriptions** (net added yesterday or over the weekend, fiscal week to date with in-store split, vs the same point last week, the top in-store stores), one thing to watch, and an editable ~60-second script with a large-type reading view. Every number in the script is checked against the data.
 - **Leadership questions log** lives on **LTR Slide**: questions logged at a WBR open the next week's talk track (“Last week I was asked about…”), each answered from that week's data, until marked answered. Answers pinned from **Ask** go to the slide's Back pocket.
 - **Presentation mode** (nav → Present): hides navigation, filters, edit controls and “Show original”; larger type; ← → move between screens; Esc exits.
 
@@ -244,4 +255,5 @@ Two colour tokens are a shade darker than the brief to pass WCAG AA as text on t
 | 7 Hardening | accessibility (axe), performance, locked weeks read-only, error boundary, e2e checklist, docs | ✅ |
 | 8 LTR Slide | weekly LTR slide, Tracker map extraction, callouts, combo chart, PPTX/PNG/JSON, settings | ✅ |
 | 9 Surveys only | calls, WBR Builder and Cross-Channel removed; survey Daily Pulse; one-time cleanup of stored call data; phone layout | ✅ |
+| 11 Subscriptions | subscription export import with daily snapshots, Subscriptions screen, subscriptions in the Daily Pulse, faster Excel reading (display formatting off) | ✅ |
 | 10 Filters & insights | Division and Associate filters, appointment file import, restated-week handling, LTR points per theme, services members want added | ✅ |

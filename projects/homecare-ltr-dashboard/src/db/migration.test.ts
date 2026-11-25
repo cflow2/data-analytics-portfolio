@@ -39,7 +39,7 @@ describe('database v2 upgrade (surveys only)', () => {
 
     const db = new HomeCareDB(name);
     await db.open();
-    expect(db.verno).toBe(3);
+    expect(db.verno).toBe(4);
     expect(db.tables.map((t) => t.name).sort()).not.toContain('calls');
     expect(db.tables.map((t) => t.name)).not.toContain('escalations');
     expect(db.tables.map((t) => t.name)).not.toContain('signals');

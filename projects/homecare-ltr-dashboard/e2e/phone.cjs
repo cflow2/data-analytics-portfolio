@@ -14,7 +14,7 @@ const { chromium, devices } = require('playwright');
   const results = [];
   const check = (name, pass, detail = '') => { results.push(pass); console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`); };
   await p.goto(url + '#/data'); await p.click('text=Load demo data'); await p.waitForSelector('text=/Loaded .* demo surveys/');
-  const routes = ['/', '/trends', '/regions', '/detractors', '/attributes', '/voc', '/slide', '/pulse', '/ask', '/review', '/data', '/settings'];
+  const routes = ['/', '/trends', '/regions', '/detractors', '/attributes', '/subscriptions', '/voc', '/slide', '/pulse', '/ask', '/review', '/data', '/settings'];
   const wide = [];
   for (const r of routes) {
     await p.goto(url + '#' + r + '?fw=40'); await p.waitForTimeout(900);

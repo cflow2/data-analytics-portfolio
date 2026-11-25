@@ -8,7 +8,7 @@ import { weekStart, DEFAULT_FY_START } from '@/lib/fiscal';
 import { REGIONS } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AppointmentRecord, AttributeKey, FollowUpRecord, LeadershipQuestion, Sentiment,
+  AppointmentRecord, AttributeKey, FollowUpRecord, LeadershipQuestion, Sentiment, SubscriptionSnapshot, SubscriptionWeek,
   StoreRecord, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
@@ -21,6 +21,9 @@ export interface DemoData {
   followups: FollowUpRecord[];
   /** appointment file: Appointment ID → RedVest Associate (2–3 per store) */
   appointments: AppointmentRecord[];
+  /** subscription export: store × week through Sun Nov 8 (FW41 in progress), and one snapshot per day FW39–FW41 */
+  subscriptionWeeks: SubscriptionWeek[];
+  subscriptionSnapshots: SubscriptionSnapshot[];
   tags: ThemeTag[];
   weeks: WeekMeta[];
   questions: LeadershipQuestion[];
@@ -349,5 +352,72 @@ export function generateDemoData(seed = 4040): DemoData {
     storeNo: s.storeNo, date: s.date, fw: s.fw, sourceFile: DEMO_SOURCE, demo: true,
   }));
 
-  return { stores, surveys, followups, tags, weeks, questions, appointments };
+  const { subscriptionWeeks, subscriptionSnapshots } = demoSubscriptions(seed + 11, stores, surveys);
+  return { stores, surveys, followups, tags, weeks, questions, appointments, subscriptionWeeks, subscriptionSnapshots };
+}
+
+// ───────────────────────────── subscriptions ─────────────────────────────
+const DEMO_SUBS_THROUGH = '2026-11-08'; // Sun of FW41: the export taken Mon Nov 9
+
+/** Daily net subscriptions per store (online + in store) and weekly completed appointments, deterministic. */
+function demoSubscriptions(seed: number, stores: StoreRecord[], surveys: SurveyRecord[]): { subscriptionWeeks: SubscriptionWeek[]; subscriptionSnapshots: SubscriptionSnapshot[] } {
+  const rng = new Rng(seed);
+  const lastDay = DEMO_SUBS_THROUGH;
+  const surveysBy = new Map<string, SurveyRecord[]>();
+  for (const s of surveys) surveysBy.set(`${s.storeNo}:${s.fw}`, [...(surveysBy.get(`${s.storeNo}:${s.fw}`) ?? []), s]);
+  // per store: base daily online rate and in-store share (some stores sell a lot more in store)
+  const prof = new Map(stores.map((st) => [st.storeNo, { online: 0.35 + rng.float() * 0.9, share: rng.chance(0.15) ? 0.3 + rng.float() * 0.3 : 0.05 + rng.float() * 0.12 }]));
+  const daily = new Map<string, [number, number]>(); // `${store}|${date}` → [subs, instore]
+  for (let d = weekStart(1, DEFAULT_FY_START); d <= lastDay; d = addDays(d, 1)) {
+    const fwd = Math.floor((Date.parse(d) - Date.parse(DEFAULT_FY_START)) / 604_800_000) + 1;
+    const promo = fwd === 41 ? 2.6 : fwd === 30 || fwd === 35 ? 1.6 : 1; // demo promotion weeks
+    for (const st of stores) {
+      const p = prof.get(st.storeNo)!;
+      const online = Math.floor(rng.float() * p.online * 2 * promo + rng.float() * 0.6);
+      const instore = rng.chance(p.share * 0.9) ? 1 : 0;
+      const cancel = rng.chance(0.02) ? 1 : 0;
+      if (online || instore || cancel) daily.set(`${st.storeNo}|${d}`, [online + instore - cancel, instore]);
+    }
+  }
+  const weekOfDate = (d: string) => Math.floor((Date.parse(d) - Date.parse(DEFAULT_FY_START)) / 604_800_000) + 1;
+  const agg = new Map<string, SubscriptionWeek>();
+  for (const [k, [subs, instore]] of daily) {
+    const [no, d] = k.split('|');
+    const fw = weekOfDate(d);
+    const st = stores.find((x) => x.storeNo === no)!;
+    const id = `2026:${fw}:${no}`;
+    const w = agg.get(id) ?? { id, fy: 2026, fw, storeNo: no, storeName: `LOWE'S OF DEMO ${st.city.toUpperCase()}, ${st.state}`, storeSet: st.region === 'R12' || st.region === 'R27' ? 'Test Stores' : 'National Stores',
+      division: '', region: st.region, district: st.district ?? '', subs: 0, online: 0, instore: 0, revenue: 0, appts: 0, regular: 0, assessments: 0, followUps: 0, exceptions: 0, followUpRequired: 0, sourceFile: DEMO_SOURCE, demo: true };
+    w.subs += subs; w.instore += instore; w.online += subs - instore; w.revenue += subs * 99;
+    agg.set(id, w);
+  }
+  // completed appointments: about 2.5 per survey; follow-ups more likely where a survey scored 0–8
+  for (const st of stores) for (let fw = 1; fw <= weekOfDate(lastDay); fw++) {
+    const sv = surveysBy.get(`${st.storeNo}:${fw}`) ?? [];
+    if (!sv.length) continue;
+    const id = `2026:${fw}:${st.storeNo}`;
+    const w = agg.get(id) ?? { id, fy: 2026, fw, storeNo: st.storeNo, storeName: `LOWE'S OF DEMO ${st.city.toUpperCase()}, ${st.state}`, storeSet: 'National Stores', division: '', region: st.region, district: st.district ?? '', subs: 0, online: 0, instore: 0, revenue: 0, appts: 0, regular: 0, assessments: 0, followUps: 0, exceptions: 0, followUpRequired: 0, sourceFile: DEMO_SOURCE, demo: true };
+    w.appts = Math.max(sv.length, Math.round(sv.length * (2 + rng.float())));
+    w.regular = w.appts;
+    const low = sv.some((s) => s.ltr !== null && s.ltr <= 8);
+    w.followUpRequired = rng.chance(low ? 0.45 : 0.08) ? 1 : 0;
+    w.exceptions = rng.chance(0.06) ? 1 : 0;
+    agg.set(id, w);
+  }
+  const subscriptionWeeks = [...agg.values()];
+  // one export per morning, Oct 25 (through Oct 24) to Nov 9 (through Nov 8)
+  const subscriptionSnapshots: SubscriptionSnapshot[] = [];
+  for (let through = '2026-10-24'; through <= lastDay; through = addDays(through, 1)) {
+    const fw = weekOfDate(through);
+    const ws = weekStart(fw, DEFAULT_FY_START);
+    const cur: Record<string, [number, number]> = {}, prior: Record<string, [number, number]> = {};
+    for (const [k, [subs, instore]] of daily) {
+      const [no, d] = k.split('|');
+      const t = d >= ws && d <= through ? cur : weekOfDate(d) === fw - 1 ? prior : null;
+      if (!t) continue;
+      const v = t[no] ?? [0, 0]; t[no] = [v[0] + subs, v[1] + instore];
+    }
+    subscriptionSnapshots.push({ id: `${addDays(through, 1)}T10:15:00`, through, fy: 2026, fw, cur, prior, sourceFile: DEMO_SOURCE, demo: true });
+  }
+  return { subscriptionWeeks, subscriptionSnapshots };
 }
