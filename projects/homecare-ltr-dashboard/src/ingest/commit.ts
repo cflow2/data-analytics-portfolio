@@ -2,7 +2,7 @@
 import { db as defaultDb, type HomeCareDB } from '@/db/db';
 import { countsForLtr } from '@/domain/survey';
 import type { FollowUpRecord, OriginalText, StoreRecord, SurveyRecord } from '@/domain/types';
-import { textKey } from './normalize';
+import { normalizeApptId, textKey } from './normalize';
 import type { FollowUpCheck, ParsedFile, ValidationReport } from './types';
 
 export async function lockedWeeks(database: HomeCareDB = defaultDb): Promise<Set<number>> {
@@ -91,6 +91,19 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
           const sec = secondary.get(surveyKey(s))?.shift();
           if (sec) { mergeInto(s, sec); deletes.push(sec.id); merged++; }
           puts.push(s);
+        }
+        // A newer Tracker is the source of truth for the weeks it covers: Tracker surveys it no longer contains
+        // (dated on or before its last survey) were removed upstream, so they are removed here too.
+        const incomingIds = new Set(incoming.map((x) => x.id));
+        const lastDate = incoming.reduce((m, x) => (x.date > m ? x.date : m), '');
+        const gone = existing.filter((x) => x.source === 'tracker' && !incomingIds.has(x.id) && x.date <= lastDate);
+        if (gone.length) {
+          deletes.push(...gone.map((x) => x.id));
+          const byFw: Record<number, number> = {};
+          for (const x of gone) byFw[x.fw] = (byFw[x.fw] ?? 0) + 1;
+          report.removedFromTracker = Object.entries(byFw).map(([fw, count]) => ({ fw: Number(fw), count })).sort((x, y) => x.fw - y.fw);
+          report.warnings.push(`${gone.length} survey${gone.length === 1 ? '' : 's'} from an earlier Tracker ${gone.length === 1 ? 'is' : 'are'} no longer in this one and ${gone.length === 1 ? 'was' : 'were'} removed: ${report.removedFromTracker.map((r) => `FW${r.fw} ${r.count}`).join(', ')}. Those weeks' LTR may change.`);
+          for (const x of gone) touchedWeeks.add(x.fw);
         }
       } else {
         const primary = existing.filter(countsForLtr);
@@ -197,6 +210,14 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
     report.unmappedStores = (await database.stores.toArray()).filter((s) => !s.district).map((s) => s.storeNo).sort();
   }
 
+  if (b.appointments?.length) {
+    const appts = b.appointments;
+    await database.appointments.bulkPut(appts);
+    const ids = new Set(appts.map((a) => a.id));
+    const withAppt = (await database.surveys.toArray()).filter((s) => countsForLtr(s) && s.appointmentId);
+    report.associateLinks = { linked: withAppt.filter((s) => ids.has(normalizeApptId(s.appointmentId))).length, withAppointment: withAppt.length };
+    if (withAppt.length) (report.info ??= []).push(`Linked ${report.associateLinks.linked.toLocaleString('en-US')} of ${withAppt.length.toLocaleString('en-US')} loaded surveys to an associate.`);
+  }
   if (b.regionMap) await database.kv.put({ key: 'regionMap', value: b.regionMap });
   if (b.medalliaRange) await database.kv.put({ key: `medalliaRange:${b.medalliaRange.id}`, value: { ...b.medalliaRange, importedAt: new Date().toISOString() } });
   const weeks = Object.keys(report.weeks).map(Number).sort((a, z) => a - z);

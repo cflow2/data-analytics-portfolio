@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useWeekData } from '@/data/useWeekData';
 import { SCREENS } from '@/screens';
-import { districtFor } from '@/analytics/ltr';
+import { geoMatch } from '@/analytics/ltr';
+import { pointsLost } from '@/analytics/pointsLost';
+import { PointsLostCard } from '@/components/voc/PointsLostCard';
+import { ServicesWanted } from '@/components/voc/ServicesWanted';
 import { maturity, themeHistory, weekOfTheme } from '@/analytics/themes';
 import { storeLabel, REGIONS } from '@/domain/geo';
 import { monthDay } from '@/lib/dates';
@@ -27,7 +30,7 @@ export function VocThemes() {
     if (!data) return null;
     const { ds, week, geo } = data;
     const fw = week.fw;
-    const geoOk = (s: SurveyRecord) => (!geo.region || s.region === geo.region) && (!geo.district || districtFor(s.storeNo, ds.stores) === geo.district) && (!geo.store || s.storeNo === geo.store);
+    const geoOk = (s: SurveyRecord) => geoMatch(s, geo, ds.stores);
     const vocAll = ds.surveys.filter((s) => s.comment && geoOk(s));
     const ids = new Set(vocAll.map((s) => s.id));
     const h = themeHistory(ds.tagList.filter((t) => ids.has(t.recordId)));
@@ -39,7 +42,9 @@ export function VocThemes() {
     }).sort((a, b) => b.cur.surveys - a.cur.surveys);
     const recent = (th: string) => vocAll.filter((s) => s.fw > fw - 4 && s.fw <= fw && (() => { const t = ds.tags.get(s.id); return t && (t.primary === th || t.secondary.includes(th)); })())
       .sort((a, b) => b.date.localeCompare(a.date));
-    return { fw, rows, cards, serviceAdd: recent('service-add'), aging: recent('aging'), untagged: rows.filter((r) => !r.tag).length };
+    const ltrWeek = (w: number) => data.ltr.filter((s) => s.fw === w);
+    const points = pointsLost(ltrWeek(fw), ds.tags, data.benchmark, ltrWeek(fw - 1));
+    return { fw, vocAll, rows, cards, points, serviceAdd: recent('service-add'), aging: recent('aging'), untagged: rows.filter((r) => !r.tag).length };
   }, [data]);
 
   const filtered = useMemo(() => (v?.rows ?? []).filter(({ s, tag }) => {
@@ -62,6 +67,7 @@ export function VocThemes() {
     { id: 'date', header: 'Date', value: (r) => r.s.date, cell: (r) => <span className="whitespace-nowrap">{monthDay(r.s.date)}</span>, width: 64 },
     { id: 'store', header: 'Store', value: (r) => storeLabel(r.s.storeNo, ds.stores), width: 150 },
     { id: 'region', header: 'Region', value: (r) => r.s.region, width: 60 },
+    ...(v.rows.some((r) => r.s.associate) ? [{ id: 'associate', header: 'Associate', value: (r: Row) => r.s.associate ?? '—', width: 130 } as Col<Row>] : []),
     { id: 'score', header: 'Score', value: (r) => r.s.ltr, align: 'right', width: 56, cell: (r) => <span className={cx('font-semibold', (r.s.ltr ?? 10) <= 8 && 'text-surveys')}>{r.s.ltr ?? '—'}</span> },
     { id: 'comment', header: 'Comment (redacted)', value: (r) => r.s.comment, sortable: false, width: '40%', cell: (r) => <RedactedText recordId={r.s.id} field="comment" text={r.s.comment} /> },
     { id: 'tags', header: 'Themes · sentiment', value: (r) => (r.tag ? [r.tag.primary, ...r.tag.secondary].map(tname).join(' + ') : 'Untagged'), width: 300,
@@ -98,6 +104,8 @@ export function VocThemes() {
             ))}
           </div>
 
+          <PointsLostCard p={v.points} fw={v.fw} benchmark={data.benchmark} />
+
           <Card title={`Quote explorer · FW${v.fw}`} actions={<span className="text-xs text-muted">{v.untagged} untagged</span>}>
             <DataTable rows={filtered} columns={cols} getRowId={(r) => r.s.id} exportName={`VOC_quotes_FW${v.fw}`} maxHeight={620}
               initialSort={[{ id: 'score', desc: false }]} empty="No comments match these filters."
@@ -114,6 +122,8 @@ export function VocThemes() {
                 </>
               } />
           </Card>
+
+          <ServicesWanted surveys={v.vocAll} tags={ds.tags} stores={ds.stores} fw={v.fw} />
 
           <div className="grid grid-cols-2 gap-3">
             {([['service-add', 'Service-add requests', v.serviceAdd], ['aging', 'Aging in place / accessibility', v.aging]] as const).map(([id, title, list]) => (

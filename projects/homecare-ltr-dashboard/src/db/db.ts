@@ -1,12 +1,14 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
-  SurveyRecord, FollowUpRecord, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
+  SurveyRecord, AppointmentRecord, FollowUpRecord, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
   ImportedFile, WeekMeta, LeadershipQuestion, KV,
 } from '@/domain/types';
 
 export class HomeCareDB extends Dexie {
   surveys!: EntityTable<SurveyRecord, 'id'>;
   followups!: EntityTable<FollowUpRecord, 'id'>;
+  /** Appointment ID → RedVest Associate (from the appointment file) */
+  appointments!: EntityTable<AppointmentRecord, 'id'>;
   attributeWeekly!: EntityTable<AttributeWeekly, 'id'>;
   stores!: EntityTable<StoreRecord, 'storeNo'>;
   tags!: EntityTable<ThemeTag, 'recordId'>;
@@ -45,13 +47,15 @@ export class HomeCareDB extends Dexie {
       await tx.table('files').where('kind').equals('loyalty-cases').delete();
       await tx.table('kv').where('key').startsWith('wbr:').delete(); // WBR Builder drafts
     });
+    // v3: appointment file (associate filter)
+    this.version(3).stores({ appointments: 'id, associate, storeNo, fw, jobId' });
   }
 }
 
 export const db = new HomeCareDB();
 
 export const DATA_TABLES = [
-  'surveys', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
+  'surveys', 'appointments', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
   'weeks', 'questions', 'kv',
 ] as const;
 export type DataTable = (typeof DATA_TABLES)[number];

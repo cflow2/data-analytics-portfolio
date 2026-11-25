@@ -120,7 +120,14 @@ export function demoFiles(d: DemoData = generateDemoData()): DemoFile[] {
       ...d.surveys.filter((s) => s.fw === 40 && s.comment).map((s) => [usDate(s.date), s.ltr, s.comment])]]]),
   });
 
-  // 5. Detractor follow-up file for FW40
+  // 5. Appointment file (Appointment ID → RedVest Associate), IDs as text like the real exports
+  files.push({
+    name: 'HomeCare_Appointments_DEMO.xlsx',
+    data: book([['Appointments', [['Appointment ID', 'Job ID', 'Associate', 'Store #', 'Appointment Date'],
+      ...d.appointments.filter((a) => (a.fw ?? 0) >= 37).map((a) => [a.id, a.jobId, a.associate, Number(a.storeNo), dateCell(a.date!)])]]]),
+  });
+
+  // 6. Detractor follow-up file for FW40
   files.push({
     name: 'FW40_DEMO.xlsx',
     data: book([['FW40', [['LL', 'Score', 'Comment', 'Store', 'SM', 'Insights', 'Region', 'FW', 'FQ', 'FP'],

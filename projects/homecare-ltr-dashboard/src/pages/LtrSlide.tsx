@@ -18,7 +18,9 @@ import type { RegionMapAsset } from '@/ingest/regionMap';
 import { monthDay, rangeLabel } from '@/lib/dates';
 import { storeLabel } from '@/domain/geo';
 import { copyText, downloadBlob } from '@/data/export';
-import { buildModel, signed, valueColor } from '@/slide/model';
+import { buildModel, restatedWeeks, signed, valueColor } from '@/slide/model';
+import { pointsLabel, pointsLost } from '@/analytics/pointsLost';
+import { themeName } from '@/domain/taxonomy';
 import type { MedalliaRange } from '@/ingest/types';
 import { COLORS, H, W, fitMap, placeCallouts } from '@/slide/layout';
 import { paintMap, paintPlaceholder, regionCenter, PLACEHOLDER_ASPECT } from '@/slide/mapCanvas';
@@ -60,6 +62,7 @@ export function LtrSlide() {
   const saved = useLive(() => (fw ? loadEdits(fw) : Promise.resolve(null)), [fw]);
   const thresholds = useSettings((s) => s.thresholds);
   const pinnedAsk = useLive(() => (fw ? getWbrNotes(fw) : Promise.resolve([] as string[])), [fw]);
+  const snapshots = useLive(async () => (await db.kv.where('key').startsWith('ltrSlideSnapshot:').toArray()).map((r) => r.value as SlideSnapshot), []);
   const ranges = useLive(async () => (await db.kv.where('key').startsWith('medalliaRange:').toArray()).map((r) => r.value as MedalliaRange), []);
   const [drawer, setDrawer] = useState<{ kind: 'region'; region: string } | { kind: 'low' } | { kind: 'info' } | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
@@ -116,9 +119,14 @@ export function LtrSlide() {
     ];
     const open = openQuestionsFor(data.ds.questions, fw);
     const questions = open.map((q) => ({ question: q.question, fw: q.fw, answer: autoAnswer(q.question, { ds: data.ds, fw, benchmark: data.benchmark, thresholds }) }));
-    const notes = talkTrack(m, model.drivers, edits, model.ytd, { questions, pinned: pinnedAsk.data ?? [] });
-    return { box, centers, callouts, title, subtitle, kpis, notes };
-  }, [model, edits, data, asset, regionCfg, fw, thresholds, pinnedAsk.data]);
+    const restated = restatedWeeks(snapshots.data ?? [], data.ds.surveys, m.trend.map((w) => w.fw));
+    const pct = (x: number | null) => (x === null ? '—' : `${(Math.floor(x * 10 + 0.5) / 10).toFixed(1)}%`);
+    const restatedLines = restated.map((r) => `FW${r.fw} changed since it was presented: ${pct(r.was.ltr)} on ${r.was.n} → ${pct(r.now.ltr)} on ${r.now.n}${r.was.display !== r.now.display ? ` (shows ${r.now.display} instead of ${r.was.display})` : ''}.`);
+    const pl = pointsLost(model.ltrSurveys.filter((x) => x.fw === fw), data.ds.tags, m.benchmark);
+    const points = pl.rows.length ? `Where LTR points went: ${pl.rows.slice(0, 5).map((r) => `${pointsLabel(r.theme, (id) => themeName(id))} ${r.pts.toFixed(1)} (${r.count})`).join(', ')}; ${pl.lost.toFixed(1)} pts in all.` : undefined;
+    const notes = talkTrack(m, model.drivers, edits, model.ytd, { questions, pinned: [...restatedLines, ...(pinnedAsk.data ?? [])], points });
+    return { box, centers, callouts, title, subtitle, kpis, notes, restatedLines };
+  }, [model, edits, data, asset, regionCfg, fw, thresholds, pinnedAsk.data, snapshots.data]);
 
   if (!data || !model || !edits || !view) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading || saved.loading || cfg.loading} error={error} empty={!loading && !!data && !data.week.hasData} emptyTitle={`No surveys for FW${fw}`}>{null}</PageGate></>;
   const { m } = model;
@@ -195,7 +203,7 @@ export function LtrSlide() {
           <ul className="space-y-2">
             {[...list].sort((a, b) => (a.ltr ?? 0) - (b.ltr ?? 0)).map((s) => (
               <li key={s.id} className="rounded-lg border border-border bg-surface p-2 text-sm">
-                <div className="text-xs text-muted tnum">Score <b className={cx((s.ltr ?? 10) <= 8 && 'text-surveys')}>{s.ltr}</b> · {s.region} · {storeLabel(s.storeNo, data.ds.stores)} · {monthDay(s.date)}</div>
+                <div className="text-xs text-muted tnum">Score <b className={cx((s.ltr ?? 10) <= 8 && 'text-surveys')}>{s.ltr}</b> · {s.region} · {storeLabel(s.storeNo, data.ds.stores)}{s.associate ? ` · ${s.associate}` : ''} · {monthDay(s.date)}</div>
                 {s.comment ? <RedactedText recordId={s.id} field="comment" text={s.comment} /> : <span className="text-xs text-muted">No comment</span>}
                 {!!s.topics?.length && <div className="mt-1 text-[11px] text-muted">Medallia topics: {s.topics.join('; ')}</div>}
               </li>
@@ -251,7 +259,8 @@ export function LtrSlide() {
           </Card>
           <Card title="Validation" actions={<span className="text-xs text-muted">Check before presenting</span>}>
             <ul className="space-y-1.5 text-sm">
-              {model.checks.map((c) => (
+              {[...model.checks, { id: 'restated', label: 'Weeks changed since presented', status: view.restatedLines.length ? 'warn' as const : 'ok' as const,
+                detail: view.restatedLines.length ? view.restatedLines.join(' ') : 'None (compared with saved snapshots; the Tracker removed or added no surveys in those weeks)' }].map((c) => (
                 <li key={c.id} className="flex gap-2">
                   <span aria-hidden className={cx('w-4 shrink-0 font-semibold', c.status === 'ok' ? 'text-grow' : c.status === 'warn' ? 'text-surveys' : 'text-muted')}>{c.status === 'ok' ? '✓' : c.status === 'warn' ? '!' : 'i'}</span>
                   <span><span className="font-medium">{c.label}</span><span className="sr-only"> ({c.status})</span>: <span className="text-muted">{c.detail}</span></span>

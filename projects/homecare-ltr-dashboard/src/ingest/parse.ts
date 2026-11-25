@@ -9,11 +9,11 @@ import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AttributeKey, AttributeWeekly, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord, SurveySource,
+  AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, OriginalText, StoreRecord, SurveyRecord, SurveySource,
 } from '@/domain/types';
 import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
-  cellText, cleanComment, hashString, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
+  cellText, cleanComment, hashString, normalizeApptId, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
 import { ATTR_FIELDS, ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
 import { redact, knownNamesRule, type RedactionRule } from './redact';
@@ -250,6 +250,36 @@ function buildFollowups(baseCtx: Ctx, rows: unknown[][], map: Record<string, num
   if (fqMismatch) r.warnings.push(`FQ column differs from the fiscal calendar on ${fqMismatch} row(s) (${fqExample[0]}). The calendar (quarter = ceil(FW ÷ 13)) was used.`);
   if (fpMismatch) r.warnings.push(`FP column differs from the fiscal calendar's month on ${fpMismatch} row(s). The calendar was used.`);
   return out;
+}
+
+function buildAppointments(ctx: Ctx, rows: unknown[][], map: Record<string, number>): AppointmentRecord[] {
+  const out = new Map<string, AppointmentRecord>();
+  const r = ctx.report;
+  let conflicts = 0;
+  for (const row of rows) {
+    if (rowIsBlank(row)) continue;
+    r.rowsRead++;
+    const id = normalizeApptId(get(row, map, 'appointmentId'));
+    const associate = cellText(get(row, map, 'associate')).replace(/\s+/g, ' ').trim();
+    if (!id) { drop(r, 'No Appointment ID'); continue; }
+    if (!associate) { drop(r, 'No associate'); continue; }
+    const rec: AppointmentRecord = { id, associate, sourceFile: ctx.fileName };
+    const job = cellText(get(row, map, 'jobId')).trim();
+    if (job) rec.jobId = job;
+    const store = normalizeStoreNo(get(row, map, 'storeNo'));
+    if (store) rec.storeNo = store;
+    const rawDate = get(row, map, 'date');
+    const date = isBlank(rawDate) ? null : parseDateCell(rawDate);
+    if (date) { rec.date = date; const fw = fiscalWeekInYear(date, ctx.fyStart); if (fw !== null) { rec.fw = fw; trackDate(r, date, fw); } }
+    const prev = out.get(id);
+    if (prev && prev.associate !== associate) { conflicts++; continue; } // first row wins; reported below
+    if (!prev) r.rowsKept++;
+    out.set(id, rec);
+  }
+  const names = new Set([...out.values()].map((a) => a.associate));
+  (r.info ??= []).push(`${out.size.toLocaleString('en-US')} appointment(s), ${names.size} associate(s). Surveys are linked by Appointment ID.`);
+  if (conflicts) r.warnings.push(`${conflicts} appointment ID(s) list more than one associate; the first one listed was kept.`);
+  return [...out.values()];
 }
 
 function buildStores(ctx: Ctx, rows: unknown[][], map: Record<string, number>, countRows = true): StoreRecord[] {
@@ -561,6 +591,7 @@ export function parseFile(req: ParseRequest): ParsedFile {
       case 'commentary': result.surveys = buildSurveys(ctx, body, cand.map, 'commentary'); break;
       case 'followup': result.followups = buildFollowups(ctx, body, cand.map); break;
       case 'store-map': result.stores = buildStores(ctx, body, cand.map); break;
+      case 'appointments': result.appointments = buildAppointments(ctx, body, cand.map); break;
       case 'medallia-analytics': result.attributeWeekly = buildAnalyticsLong(ctx, body, cand.map); break;
     }
     if (report.rowsKept === 0) report.warnings.push('No usable rows were found under the header row.');

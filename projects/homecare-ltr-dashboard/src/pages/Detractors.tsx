@@ -76,6 +76,7 @@ export function Detractors() {
     { id: 'store', header: 'Store', value: (r) => lbl(r.storeNo), width: 170 },
     { id: 'region', header: 'Region', value: (r) => r.region, width: 64 },
     { id: 'district', header: 'District', value: (r) => r.district, width: 84 },
+    ...(v.rows.some((r) => r.associate) ? [{ id: 'associate', header: 'Associate', value: (r: DetractorRow) => r.associate ?? '—', width: 140 } as Col<DetractorRow>] : []),
     { id: 'score', header: 'Score', value: (r) => r.score, align: 'right', width: 62,
       cell: (r) => <span className={cx('font-semibold', r.band === '0-6' && 'text-surveys')}>{r.score}<span className="sr-only"> ({r.band})</span></span> },
     { id: 'comment', header: 'Comment (redacted)', value: (r) => r.comment, sortable: false, width: '24%', cell: (r) => <RedactedText recordId={r.id} field="comment" text={r.comment} /> },

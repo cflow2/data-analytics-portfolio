@@ -102,6 +102,16 @@ export const SPECS: KindSpec[] = [
     ],
   },
   {
+    kind: 'appointments', label: 'Appointment file (RedVest Associate)', fileHint: /appoint|job|schedul|associate/i,
+    fields: [
+      { key: 'appointmentId', label: 'Appointment ID', required: true, aliases: ['appointment id', 'appointment #', 'appointment number', 'appt id', 'appt #', 'appointment no', 'appointment'] },
+      { key: 'associate', label: 'Associate', required: true, aliases: ['associate', 'associate name', 'redvest associate', 'redvest', 'technician', 'technician name', 'tech', 'tech name', 'service associate', 'assigned associate', 'assigned to', 'resource', 'resource name', 'employee', 'employee name'] },
+      { key: 'jobId', label: 'Job ID', required: false, aliases: ['job id', 'job #', 'job number', 'job no', 'job', 'work order', 'work order #', 'work order number', 'project number'] },
+      { key: 'storeNo', label: 'Store #', required: false, aliases: ['store #', 'store', 'store number', 'servicing store', 'store no'] },
+      { key: 'date', label: 'Appointment date', required: false, aliases: ['appointment date', 'service date', 'scheduled date', 'completed date', 'date', 'visit date'] },
+    ],
+  },
+  {
     kind: 'store-map', label: 'Store → District mapping', fileHint: /(store|district).*(map|district)/i,
     fields: [
       { key: 'storeNo', label: 'Store #', required: true, aliases: ['store #', 'store', 'store number', 'store no'] },

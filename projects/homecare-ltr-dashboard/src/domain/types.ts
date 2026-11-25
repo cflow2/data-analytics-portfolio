@@ -8,7 +8,7 @@ export type TagSource = 'AI' | 'Rule' | 'Manual' | 'Demo';
 export type FollowUpStatus = 'Documented' | 'Email only' | 'Missing';
 export type FileKind =
   | 'tracker' | 'medallia-responses' | 'medallia-analytics' | 'commentary'
-  | 'followup' | 'store-map' | 'demo';
+  | 'followup' | 'store-map' | 'appointments' | 'demo';
 
 export type AttributeKey =
   | 'value' | 'scheduling' | 'quality' | 'timeToAppt' | 'processPrior'
@@ -36,8 +36,23 @@ export interface SurveyRecord {
   attrs?: Partial<Record<AttributeKey, number>>;
   /** Medallia topic tags (“Category - Topic (Sentiment)”). Suggestions only, never used to set themes. */
   topics?: string[];
+  /** RedVest Associate, joined from the appointment file by Appointment ID (not stored on the survey) */
+  associate?: string;
   sourceFile: string;
   redactionUncertain?: boolean;
+  demo?: boolean;
+}
+
+/** One HomeCare+ appointment from the appointment file: links a survey (by Appointment ID) to its RedVest Associate. */
+export interface AppointmentRecord {
+  /** Appointment ID (same as the Tracker's Appointment ID) */
+  id: string;
+  jobId?: string;
+  associate: string;
+  storeNo?: string;
+  date?: ISODate;
+  fw?: number;
+  sourceFile: string;
   demo?: boolean;
 }
 

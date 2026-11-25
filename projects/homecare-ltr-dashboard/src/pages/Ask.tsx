@@ -1,3 +1,4 @@
+import { geoParts } from '@/analytics/ltr';
 import { useEffect, useRef, useState } from 'react';
 import { useWeekData } from '@/data/useWeekData';
 import { SCREENS } from '@/screens';
@@ -36,7 +37,7 @@ export function Ask() {
       <PageGate screen={sc} loading={loading} error={error} empty={!!data && data.ds.surveys.length === 0} emptyTitle="Nothing is loaded yet">
         {data && (
           <div className="mx-auto max-w-[920px] space-y-3">
-            <p className="flex items-center gap-1.5 text-xs text-muted"><Icon name="lock" size={13} /> Answers are computed on this laptop from the loaded data, for {data.week.label.split(' · ')[0]}{data.geoFiltered ? ` · ${[data.filters.region, data.filters.district, data.filters.store].filter(Boolean).join(' › ')}` : ''} unless the question says otherwise. Nothing is sent anywhere.</p>
+            <p className="flex items-center gap-1.5 text-xs text-muted"><Icon name="lock" size={13} /> Answers are computed on this laptop from the loaded data, for {data.week.label.split(' · ')[0]}{data.geoFiltered ? ` · ${geoParts(data.geo).join(' › ')}` : ''} unless the question says otherwise. Nothing is sent anywhere.</p>
             {turns.length === 0 && (
               <Card>
                 <p className="text-sm text-muted">Ask about LTR, detractors, regions, stores, attributes or comment themes. Name weeks (“FW38”, “last 4 weeks”, “FYTD”), a region (“R5”), a store (“#1234”) or a theme (“exclusions”).</p>

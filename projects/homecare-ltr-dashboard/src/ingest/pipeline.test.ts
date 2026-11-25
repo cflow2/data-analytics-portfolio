@@ -177,3 +177,29 @@ describe('real Detractors tab layout (made-up names)', () => {
     expect(p.build!.report.warnings.join(' ')).not.toMatch(/FP column/);
   });
 });
+
+describe('a newer Tracker restates past weeks', () => {
+  it('removes Tracker surveys the newer file no longer contains, and reports them by week', async () => {
+    const db = new HomeCareDB('restate-test');
+    const all = demo.surveys.filter((s) => s.fw <= 41).map((s) => ({ ...s, demo: undefined }));
+    const tracker = (rows: typeof all, name: string) => {
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trackerAoa(rows)), 'Export Data');
+      const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+      return parseFile(req(name, buf));
+    };
+    await commitParsed(tracker(all, 'LTR_Tracker1116.xlsx'), { database: db });
+    const fw39 = all.filter((s) => s.fw === 39);
+    const dropped = new Set(fw39.slice(0, 23).map((s) => s.id));
+    const newer = all.filter((s) => !dropped.has(s.id));
+    const r = await commitParsed(tracker(newer, 'LTR_Tracker1123.xlsx'), { database: db });
+    expect(r.removedFromTracker).toEqual([{ fw: 39, count: 23 }]);
+    expect(r.warnings.join(' ')).toMatch(/23 surveys from an earlier Tracker/);
+    expect(await db.surveys.where('fw').equals(39).count()).toBe(fw39.length - 23);
+    // A Tracker covering fewer days never removes surveys dated after its last survey.
+    const older = all.filter((s) => s.fw <= 38);
+    const r2 = await commitParsed(tracker(older, 'LTR_Tracker_old.xlsx'), { database: db });
+    expect(r2.removedFromTracker).toBeUndefined();
+    expect(await db.surveys.where('fw').equals(40).count()).toBe(all.filter((s) => s.fw === 40).length);
+  }, 60_000);
+});

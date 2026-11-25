@@ -3,9 +3,11 @@ import { Link, useLocation } from 'react-router';
 import { db } from '@/db/db';
 import { useWeekData } from '@/data/useWeekData';
 import { SCREENS } from '@/screens';
-import { baseline, deltaPts, groupByWeek, poolWeeks, weekOf } from '@/analytics/ltr';
+import { baseline, deltaPts, geoParts, groupByWeek, poolWeeks, weekOf } from '@/analytics/ltr';
 import { groupRange, lowest, rangeLabel } from '@/analytics/attributes';
 import { themeMentions } from '@/analytics/voc';
+import { pointsLost } from '@/analytics/pointsLost';
+import { PointsLostCard } from '@/components/voc/PointsLostCard';
 import { detractorRows } from '@/analytics/detractors';
 import { ruleHeadline } from '@/analytics/headline';
 import { themeName } from '@/domain/taxonomy';
@@ -73,6 +75,7 @@ export function CommandCenter() {
     const low = lowest(attrs);
     const lowPrev = low ? data.attrsFor(fw - 1).find((a) => a.key === low.key) : undefined;
     const mentions = themeMentions(ds.tagList, fw);
+    const points = pointsLost(data.weekSurveys, ds.tags, benchmark, ltr.filter((x) => x.fw === fw - 1));
     const dets = detractorRows(data.weekSurveys, ds.followups, ds.tags, ds.stores, todayISO());
     const regions = groupByWeek(data.weekSurveys, (x) => x.region);
     const below = [...regions].map(([r, mm]) => ({ r, s: weekOf(mm, fw) }))
@@ -101,6 +104,7 @@ export function CommandCenter() {
       if (r.scoreMismatches?.length) problems.push(`${f.name}: ${r.scoreMismatches.length} Score vs LTR disagreement(s)`);
       for (const c of r.followupCheck ?? []) if (c.missing.length) problems.push(`${f.name}: ${c.missing.length} FW${c.fw} detractor(s) missing from the follow-up file`);
       if (r.unmappedStores?.length) problems.push(`${f.name}: ${r.unmappedStores.length} unmapped store(s)`);
+      if (r.removedFromTracker?.length) problems.push(`${f.name}: ${r.removedFromTracker.reduce((n, x) => n + x.count, 0)} survey(s) removed upstream (${r.removedFromTracker.map((x) => `FW${x.fw}`).join(', ')} restated)`);
       if (r.redactionUncertain) problems.push(`${f.name}: ${r.redactionUncertain} record(s) with uncertain redaction`);
     }
     const alerts: Alert[] = [];
@@ -121,7 +125,7 @@ export function CommandCenter() {
     const tagged = vocIds.length > 0 && vocIds.every((id) => ds.tags.has(id));
 
     return {
-      fw, cur, base, fytd, fytdPrev, low, lowPrev, sparkWeeks, mentions, dets, alerts, meta, has, tagged, comments, atOrAbove, regionsN: regionsAll.length,
+      fw, cur, base, fytd, fytdPrev, points, low, lowPrev, sparkWeeks, mentions, dets, alerts, meta, has, tagged, comments, atOrAbove, regionsN: regionsAll.length,
       atOrAbovePrev: regionsPrev.filter((x) => x.pct !== null && x.pct >= benchmark).length, regionsPrevN: regionsPrev.length,
       ltrSpark: sparkWeeks.map((w) => weekOf(weekly, w).pct),
       ltrFaded: sparkWeeks.map((w) => !canColor(weekOf(weekly, w).n, thresholds)),
@@ -147,7 +151,7 @@ export function CommandCenter() {
       <PageGate screen={s} loading={loading} error={error} empty={empty} emptyTitle={data ? `No data loaded for FW${data.week.fw}` : undefined}>
         {data && m && (
           <div className="space-y-3">
-            {data.geoFiltered && <p className="text-xs text-muted">Filtered to {[data.filters.region, data.filters.district, data.filters.store].filter(Boolean).join(' › ')}.</p>}
+            {data.geoFiltered && <p className="text-xs text-muted">Filtered to {geoParts(data.geo).join(' › ')}.</p>}
             <div className="grid grid-cols-4 gap-3">
               <KpiCard label={`LTR · FW${m.fw}`} value={m.cur.pct === null ? '—' : `${m.cur.pct.toFixed(1)}%`} n={m.cur.n}
                 delta={deltaPts(m.cur, m.base.summary)} compareLabel={`${cmpLabel} (n=${m.base.summary.n})`} spark={m.ltrSpark} sparkFaded={m.ltrFaded} />
@@ -200,6 +204,8 @@ export function CommandCenter() {
                 )}
               </div>
             </div>
+
+            <PointsLostCard p={m.points} fw={m.fw} benchmark={data.benchmark} />
 
             <Card title={`Week status · FW${m.fw}`}>
               <ol className="flex flex-wrap items-center gap-x-2 gap-y-2 text-sm" aria-label="Weekly workflow checklist">

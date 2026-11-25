@@ -111,3 +111,6 @@ export function cleanComment(v: unknown): string {
   const t = cellText(v);
   return PLACEHOLDER.test(t) ? '' : t;
 }
+
+/** Appointment IDs compare as trimmed text ("123.0" and " 123" are the same appointment). */
+export const normalizeApptId = (v: unknown): string => cellText(v).replace(/\s+/g, '').replace(/^(\d+)\.0+$/, '$1');

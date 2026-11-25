@@ -25,6 +25,10 @@ export interface ValidationReport {
   storesFromSheets?: number;
   redactions: Record<string, number>;
   redactionUncertain: number;
+  /** Tracker: surveys in an earlier Tracker that this one no longer contains (removed), by week */
+  removedFromTracker?: { fw: number; count: number }[];
+  /** appointments: Tracker surveys linked to an associate / Tracker surveys with an Appointment ID */
+  associateLinks?: { linked: number; withAppointment: number };
   /** commit stage */
   alreadyLoaded?: number;
   merged?: number;
@@ -53,6 +57,8 @@ export interface BuildResult {
   report: ValidationReport;
   /** Tracker only: the region map pictures from the “LTR Region Map” sheet */
   regionMap?: import('./regionMap').RegionMapAsset | null;
+  /** Appointment file: Appointment ID → RedVest Associate */
+  appointments?: import('@/domain/types').AppointmentRecord[];
   /** Medallia Analytics only: the whole-range LTR (e.g. a fiscal-year-to-date view) */
   medalliaRange?: MedalliaRange | null;
 }

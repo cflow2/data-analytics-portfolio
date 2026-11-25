@@ -5,7 +5,7 @@ import * as echarts from 'echarts/core';
 import { db } from '@/db/db';
 import { useWeekData } from '@/data/useWeekData';
 import { SCREENS } from '@/screens';
-import { groupByWeek, periodSeries, weekOf, type Grain, type PeriodPoint } from '@/analytics/ltr';
+import { geoParts, groupByWeek, periodSeries, weekOf, type Grain, type PeriodPoint } from '@/analytics/ltr';
 import { lowest } from '@/analytics/attributes';
 import { canColor, type LtrSummary } from '@/lib/ltr';
 import { weekInfo } from '@/lib/fiscal';
@@ -120,7 +120,7 @@ export function LtrTrends() {
         {data && view && mainOption && (
           <div className="space-y-3">
             <Chart
-              title={`Weekly LTR, FY to date${data.geoFiltered ? ` · ${[data.filters.region, data.filters.district, data.filters.store].filter(Boolean).join(' › ')}` : ''}`}
+              title={`Weekly LTR, FY to date${data.geoFiltered ? ` · ${geoParts(data.geo).join(' › ')}` : ''}`}
               height={350} option={mainOption}
               ariaLabel={`LTR by ${grain} through FW${view.fw} with the ${data.benchmark}% benchmark band and n per period`}
               table={{ columns: ['Period', 'LTR %', 'n', 'Promoters', 'Detractors (0–8)', 'Detractors 0–6'], rows: view.series.map((p) => [p.label, p.pct === null ? null : Number(p.pct.toFixed(1)), p.n, p.promoters, p.detractors, p.detractors0to6]) }}

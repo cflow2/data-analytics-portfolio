@@ -4,9 +4,26 @@ import { fiscalMonth, fiscalQuarter, weeksInMonth } from '@/lib/fiscal';
 import { countsForLtr } from '@/domain/survey';
 import { UNMAPPED } from '@/domain/geo';
 import type { StoreRecord, SurveyRecord } from '@/domain/types';
+import { divisionOf } from '@/config/regions';
 import type { CompareTo } from '@/state/filters';
 
-export interface GeoFilter { region: string | null; district: string | null; store: string | null }
+export interface GeoFilter { division?: string | null; region: string | null; district: string | null; store: string | null; associate?: string | null }
+
+/** Division of a survey: the Tracker's Lowe's Division, else the region config's division for its region. */
+export const surveyDivision = (s: Pick<SurveyRecord, 'division' | 'region'>): string | null => s.division || divisionOf(s.region) || null;
+
+export const isGeoFiltered = (g: GeoFilter) => !!(g.division || g.region || g.district || g.store || g.associate);
+export const geoParts = (g: GeoFilter, storeName: (no: string) => string = (no) => no) =>
+  [g.division ? `${g.division[0]}${g.division.slice(1).toLowerCase()}` : null, g.region, g.district, g.store ? storeName(g.store) : null, g.associate ? `Associate: ${g.associate}` : null].filter(Boolean) as string[];
+
+/** Does a survey match the geography (and optional associate) filter? */
+export function geoMatch(s: SurveyRecord, geo: GeoFilter, stores: Map<string, StoreRecord>): boolean {
+  return (!geo.division || surveyDivision(s) === geo.division)
+    && (!geo.region || s.region === geo.region)
+    && (!geo.district || districtFor(s.storeNo, stores) === geo.district)
+    && (!geo.store || s.storeNo === geo.store)
+    && (!geo.associate || s.associate === geo.associate);
+}
 
 export function districtFor(storeNo: string, stores: Map<string, StoreRecord>): string {
   return stores.get(storeNo)?.district || UNMAPPED;
@@ -14,11 +31,7 @@ export function districtFor(storeNo: string, stores: Map<string, StoreRecord>): 
 
 /** Tracker (LTR-source) surveys matching the geography filter. */
 export function ltrSurveys(surveys: SurveyRecord[], geo: GeoFilter, stores: Map<string, StoreRecord>): SurveyRecord[] {
-  return surveys.filter((s) =>
-    countsForLtr(s)
-    && (!geo.region || s.region === geo.region)
-    && (!geo.district || districtFor(s.storeNo, stores) === geo.district)
-    && (!geo.store || s.storeNo === geo.store));
+  return surveys.filter((s) => countsForLtr(s) && geoMatch(s, geo, stores));
 }
 
 export const EMPTY: LtrSummary = { n: 0, promoters: 0, detractors: 0, detractors0to6: 0, detractors7to8: 0, pct: null };

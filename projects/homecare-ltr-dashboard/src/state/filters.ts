@@ -6,9 +6,11 @@ export type CompareTo = 'prior' | 'avg4' | 'fytd';
 export interface Filters {
   fw: number | null;
   compare: CompareTo;
+  division: string | null;
   region: string | null;
   district: string | null;
   store: string | null;
+  associate: string | null;
 }
 
 const COMPARES: CompareTo[] = ['prior', 'avg4', 'fytd'];
@@ -19,9 +21,11 @@ export function parseFilters(p: URLSearchParams): Filters {
   return {
     fw: Number.isInteger(fw) && fw >= 1 && fw <= 53 ? fw : null,
     compare: COMPARES.includes(compare) ? compare : 'prior',
+    division: ['NORTH', 'SOUTH', 'WEST'].includes(p.get('div') ?? '') ? p.get('div') : null,
     region: p.get('region') || null,
     district: p.get('district') || null,
     store: p.get('store') || null,
+    associate: p.get('assoc') || null,
   };
 }
 
@@ -33,9 +37,11 @@ export function serializeFilters(f: Partial<Filters>, base = new URLSearchParams
   };
   if ('fw' in f) set('fw', f.fw);
   if ('compare' in f) set('cmp', f.compare, 'prior');
+  if ('division' in f) set('div', f.division);
   if ('region' in f) set('region', f.region);
   if ('district' in f) set('district', f.district);
   if ('store' in f) set('store', f.store);
+  if ('associate' in f) set('assoc', f.associate);
   return p;
 }
 
@@ -45,10 +51,12 @@ export function useFilters(): [Filters, (patch: Partial<Filters>) => void] {
   const filters = useMemo(() => parseFilters(params), [params]);
   const update = useCallback(
     (patch: Partial<Filters>) => {
-      // Cascading: changing region clears district/store; changing district clears store.
+      // Cascading: division → region → district → store → associate; changing one clears those below it.
       const p = { ...patch };
-      if ('region' in p && !('district' in p)) { p.district = null; p.store = null; }
-      if ('district' in p && !('store' in p)) p.store = null;
+      if ('division' in p && !('region' in p)) p.region = null;
+      if (('division' in p || 'region' in p) && !('district' in p)) p.district = null;
+      if (('division' in p || 'region' in p || 'district' in p) && !('store' in p)) p.store = null;
+      if (('division' in p || 'region' in p || 'district' in p || 'store' in p) && !('associate' in p)) p.associate = null;
       setParams((prev) => serializeFilters(p, prev), { replace: true });
     },
     [setParams],

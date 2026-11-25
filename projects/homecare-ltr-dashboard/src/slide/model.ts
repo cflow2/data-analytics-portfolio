@@ -6,7 +6,7 @@ import type { MedalliaRange } from '@/ingest/types';
 import { weekEnd } from '@/lib/fiscal';
 import { monthDay } from '@/lib/dates';
 const weekEndLabel = (fw: number) => `${monthDay(weekEnd(fw))} (end of FW${fw})`;
-import { atOrAbove, displayWhole, keyDrivers, slideMetrics, DEFAULT_DRIVERS, type DriverDef, type DriverValue, type RegionRow, type SlideMetrics, type WeekStats } from './ltrMetrics';
+import { atOrAbove, displayWhole, keyDrivers, slideMetrics, weekStats, DEFAULT_DRIVERS, type DriverDef, type DriverValue, type RegionRow, type SlideMetrics, type WeekStats } from './ltrMetrics';
 import { COLORS } from './layout';
 
 export interface SlideModel {
@@ -78,3 +78,21 @@ export function buildModel(surveys: SurveyRecord[], analytics: AttributeWeekly[]
 }
 
 export type { ThemeTag };
+
+/** A week presented earlier (saved snapshot) whose Tracker numbers have since changed. */
+export interface Restatement { fw: number; was: { n: number; ltr: number | null; display: number | null }; now: { n: number; ltr: number | null; display: number | null }; savedAt: string }
+
+export function restatedWeeks(snapshots: { fw: number; savedAt: string; metrics: { cur: WeekStats } }[], surveys: SurveyRecord[], weeks: number[]): Restatement[] {
+  const ltr = surveys.filter(countsForLtr);
+  const out: Restatement[] = [];
+  for (const fw of weeks) {
+    const snap = snapshots.find((x) => x.fw === fw);
+    if (!snap) continue;
+    const now = weekStats(fw, ltr.filter((x) => x.fw === fw).map((x) => x.ltr));
+    const was = snap.metrics.cur;
+    if (now.n !== was.n || Math.abs((now.ltr ?? 0) - (was.ltr ?? 0)) > 1e-9) {
+      out.push({ fw, savedAt: snap.savedAt, was: { n: was.n, ltr: was.ltr, display: was.display }, now: { n: now.n, ltr: now.ltr, display: now.display } });
+    }
+  }
+  return out;
+}

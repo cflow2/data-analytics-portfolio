@@ -43,6 +43,11 @@ export function ValidationReportView({ report }: { report: ValidationReport }) {
           {weeks.length > 8 ? `FW${weeks[0][0]}–FW${weeks[weeks.length - 1][0]} (${weeks.length} weeks)` : weeks.map(([w, n]) => `FW${w}: ${n.toLocaleString()}`).join(' · ')}
         </Row>
       )}
+      {!!report.removedFromTracker?.length && (
+        <Row label="Removed (no longer in the Tracker)" flag>
+          {report.removedFromTracker.reduce((n, r) => n + r.count, 0)} survey(s): {report.removedFromTracker.map((r) => `FW${r.fw} ${r.count}`).join(' · ')}. Those weeks now match this Tracker.
+        </Row>
+      )}
       {report.alreadyLoaded !== undefined && report.alreadyLoaded > 0 && <Row label="Already loaded">{report.alreadyLoaded.toLocaleString()} rows were already in the database (updated, not duplicated)</Row>}
       {report.merged !== undefined && report.merged > 0 && <Row label="Merged into Tracker surveys">{report.merged.toLocaleString()}</Row>}
       {report.scoreMismatches && (

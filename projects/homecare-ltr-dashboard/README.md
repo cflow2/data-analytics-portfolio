@@ -53,6 +53,8 @@ Requires Node 20+. The two `e2e` scripts need Playwright (`npm i -D playwright &
 | 4-5-4 calendar, Sat–Fri weeks, FW1 = 2026-01-31, WBR = week end + 5 days, quarter = ⌈FW ÷ 13⌉ | `src/lib/fiscal.ts`; FY start in **Settings** (for FY27) | `src/lib/fiscal.test.ts` (also checked against the Tracker's `Fiscal Calendar` sheet on import) |
 | LTR source of truth = Tracker `Likelihood to Recommend`; `Score` (100/0) is checked, not used | `src/ingest/parse.ts`, `src/domain/survey.ts` | `src/ingest/pipeline.test.ts` |
 | District from the store→district mapping, never from Lowe's Market | `src/ingest/parse.ts` | `src/ingest/tracker.test.ts` |
+| A newer Tracker replaces the weeks it covers (removed surveys are deleted and reported) | `src/ingest/commit.ts` | `src/ingest/pipeline.test.ts` (“a newer Tracker restates past weeks”) |
+| Points lost per theme = 100 × (0–8 surveys with that primary theme) ÷ n | `src/analytics/pointsLost.ts` | `src/analytics/pointsLost.test.ts` |
 | Follow-up: Documented only when member contact is described; blank = Missing; voicemail = Documented | `src/ingest/followup.ts` | `src/ingest/specs.test.ts` |
 | Theme taxonomy, keyword rules, default status | **Settings → Theme taxonomy** (stored); defaults in `src/domain/taxonomy.ts` | `src/tagging/engine.test.ts` |
 | Primary-theme precedence, sub-tags | `src/tagging/engine.ts` | `src/tagging/engine.test.ts` |
@@ -73,6 +75,7 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 | Customer Commentary | header on row 2; `date, score, comment` | Fills comments on matching Tracker surveys. |
 | Detractor follow-up (`FW40.xlsx`, or the Tracker's `Detractors` tab) | `LL, Score, Comment, Store, SM, Insights, Region, FW, FQ, FP` (header on row 1) | Insights → **Documented** only when contact with the member is described (called, contacted, spoke, left a voicemail, “customer confirmed…”); emails, plans (“I will call…”, “store asked to contact…”) and internal reviews/coaching → **Email only**; blank → **Missing**; detractors absent from the file → **Missing**. Names in the SM column are redacted wherever they appear. FQ/FP are checked against the calendar. |
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
+| Appointment file (RedVest Associate) | `Appointment ID` + `Associate` required; `Job ID`, `Store #`, `Appointment date` optional (common names such as *Appt ID*, *Technician Name*, *Job #*, *Service Date* are recognised; otherwise map the columns once) | Links each survey to its associate by Appointment ID, whichever file is loaded first. The report says how many loaded surveys were linked. If one Appointment ID lists two associates, the first is kept and the conflict is reported. |
 
 Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, notes, headline or slide edits (exports still work; untagged records still get their first rule tags).
 
@@ -80,12 +83,15 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 
 **Source of truth:** LTR is computed only from Tracker rows (`Likelihood to Recommend`; the `Score` column is checked against it and disagreements are listed).
 
+**A newer Tracker replaces the weeks it covers.** Tracker surveys that an earlier Tracker had but the new one doesn't (dated on or before the new file's last survey) are removed, and the report lists them by week. This happens in practice: consecutive weekly Trackers have dropped surveys from earlier weeks. The LTR Slide's validation panel and Back pocket flag any week that changed after it was presented (compared with the saved snapshot).
+
 ## Privacy
 
 - On import, comments and SM insights pass through a **redaction** step: emails, order numbers (12+ digits), US phone numbers, street addresses, names after `CX`, `Caller`, `Spoke with:`, `Name:`, `Mr/Mrs/Ms`, names after `Store Manager`/`SM`/`technician`/`associate`, “First Last” before an action verb (“… reviewed”, “… contacted”), every name listed in a follow-up file's SM column, and ~900 common US first names bundled locally (words that are also ordinary words — Will, Mark, May, Bill, Jack… — are excluded). Remaining capitalised words after “with/by/tech/associate” mark the record *uncertain* for the Review Queue. “No Comment”-style placeholders are treated as blank. Rules are editable in **Settings → Redaction rules** (with a test box).
 - Original text is stored only in IndexedDB (`originals` table). The UI shows redacted text; "Show original" relocks after 60 s and is unavailable in Presentation mode.
 - Text where PII may remain (e.g. "spoke with bob jones") is flagged for the Review Queue.
 - The JSON backup contains original text — keep it on the work laptop.
+- **RedVest Associate names** from the appointment file may appear anywhere: screens, filters, tables, exports and Presentation mode (decision of 11/25/2026). Names written *inside* comment text are still redacted.
 
 ## Theme tagging (rules engine)
 
@@ -98,6 +104,18 @@ Every survey comment is tagged on import (and on **Data Manager → Re-run taggi
 - Theme pattern (last 4 weeks): Emerging = seen in 1 week, Repeated = 2–3 weeks, Persistent = all 4.
 
 On the demo data the rules reproduce every baseline exactly; on a real FY26 Tracker about 8% of comments land in the Review Queue.
+
+## Filters
+
+**Fiscal week · Compare to · Division · Region · District · Store · Associate**, all kept in the URL so every view is linkable. Choosing a division narrows the region list (Lowe's Division from the Tracker, else the region config in Settings); each level clears the levels below it. **Associate** appears once an appointment file is loaded and lists the associates in the current division/region/district/store.
+
+## Where LTR points went
+
+Every survey that scores 0–8 costs 100 ÷ n points of LTR (0.5 pts when n = 200). **Where LTR points went** (Command Center and VOC Themes) groups those surveys by their comment's primary theme, plus *No comment*, so the rows add up exactly to 100 − LTR. It shows each theme's points this week and last week. The LTR Slide's Back pocket carries the same split. `src/analytics/pointsLost.ts`, tested in `pointsLost.test.ts`.
+
+## Services members want added
+
+**VOC Themes → Services members want added** ranks services outside the standard visit (tankless and gas water heaters, roof-vented dryer vents, second-story work, gutters, light fixtures, garage doors, detectors…) by how many members mention them. A mention only counts when the comment asks for the service or says it wasn't covered (or is tagged Service-add or Exclusions), so “they changed my HVAC filter” doesn't count. It shows asked-to-add vs told-not-covered, this week, % that still scored 9–10, and when it was last seen, for FYTD, 13 weeks or the week. Click a service for its comments; the table exports to CSV/Excel. The service list lives in `src/analytics/serviceRequests.ts`.
 
 ## Daily Pulse and Presentation mode
 
@@ -226,3 +244,4 @@ Two colour tokens are a shade darker than the brief to pass WCAG AA as text on t
 | 7 Hardening | accessibility (axe), performance, locked weeks read-only, error boundary, e2e checklist, docs | ✅ |
 | 8 LTR Slide | weekly LTR slide, Tracker map extraction, callouts, combo chart, PPTX/PNG/JSON, settings | ✅ |
 | 9 Surveys only | calls, WBR Builder and Cross-Channel removed; survey Daily Pulse; one-time cleanup of stored call data; phone layout | ✅ |
+| 10 Filters & insights | Division and Associate filters, appointment file import, restated-week handling, LTR points per theme, services members want added | ✅ |

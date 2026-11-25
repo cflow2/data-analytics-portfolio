@@ -4,7 +4,7 @@ import type { LtrSummary, SampleThresholds } from '@/lib/ltr';
 import { canColor } from '@/lib/ltr';
 import { todayISO } from '@/lib/dates';
 import { REGIONS, regionSortKey } from '@/domain/geo';
-import { baseline, byWeek, groupByWeek, ltrSurveys, poolWeeks, weekOf, type GeoFilter } from './ltr';
+import { baseline, byWeek, groupByWeek, isGeoFiltered, ltrSurveys, poolWeeks, weekOf, type GeoFilter } from './ltr';
 import { attributeScores, groupRange, lowest, rangeLabel, type AttributeScore } from './attributes';
 import { detractorRows, rootCauseMix, type DetractorRow } from './detractors';
 import { themeMentions, type ThemeCount } from './voc';
@@ -51,7 +51,7 @@ function countBy<T>(xs: T[], key: (x: T) => string): { key: string; count: numbe
 export function weekFacts(ds: Dataset, fw: number, benchmark: number, thresholds: SampleThresholds, geo: GeoFilter = { region: null, district: null, store: null }): WeekFacts {
   const ltr = ltrSurveys(ds.surveys, geo, ds.stores);
   const weekly = byWeek(ltr);
-  const geoFiltered = !!(geo.region || geo.district || geo.store);
+  const geoFiltered = isGeoFiltered(geo);
   const cur = weekOf(weekly, fw);
   const ws = ltr.filter((s) => s.fw === fw);
   const rg = groupByWeek(ltr.filter((s) => s.fw === fw || s.fw === fw - 1), (s) => s.region);

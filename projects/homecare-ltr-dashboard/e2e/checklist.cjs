@@ -60,7 +60,7 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   await page.click('text=/Import all ready/');
   await page.waitForFunction(() => [...document.querySelectorAll('article')].every((a) => a.textContent.includes('Imported')), null, { timeout: 120000 });
   check('No Loyalty Cases (call) files are offered or imported', !files.some((f) => /Loyalty/i.test(f)));
-  await page.waitForFunction(() => /Files\s*6/.test(document.querySelector('main')?.innerText ?? ''), null, { timeout: 10000 }).catch(() => {});
+  await page.waitForFunction((n) => new RegExp('Files\\s*' + n).test(document.querySelector('main')?.innerText ?? ''), files.length, { timeout: 10000 }).catch(() => {});
   const counts1 = await page.locator('section:has-text("What’s loaded") dl').innerText();
   await page.click('text=Clear imported');
   const again = files.filter((f) => /Tracker|FW40/.test(f));
@@ -104,6 +104,15 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   }
   await page.keyboard.press('Escape');
   check('Presentation mode shows no unredacted text and no “Show original”', !leaks.length && !toggles, leaks.join(', '));
+
+  // 4b. Division and Associate filters (demo appointment file links surveys to associates)
+  await page.goto(url + '#/?fw=40&div=WEST'); await page.waitForTimeout(700);
+  const westText = await main();
+  const assocOptions = await page.locator('select[aria-label="Associate"], label:has-text("Associate") select').first().locator('option').count().catch(() => 0);
+  check('Division filter narrows Command Center; Associate filter lists the demo associates', /Filtered to West/.test(westText) && assocOptions > 2, `associate options ${assocOptions}`);
+  await page.goto(url + '#/voc?fw=40'); await page.waitForTimeout(700);
+  const voc = await main();
+  check('VOC Themes shows where LTR points went and services members want added', /Where LTR points went/.test(voc) && /Services members want added/.test(voc) && /Tankless water heater/.test(voc));
 
   // 5. Daily Pulse is built from surveys
   await page.goto(url + '#/pulse'); await page.waitForTimeout(600);

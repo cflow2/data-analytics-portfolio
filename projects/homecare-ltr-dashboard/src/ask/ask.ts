@@ -5,7 +5,7 @@
  */
 import type { Dataset } from '@/data/dataset';
 import { weekFacts, type WeekFacts } from '@/analytics/facts';
-import { byWeek, districtFor, ltrSurveys, pool, weekOf, type GeoFilter } from '@/analytics/ltr';
+import { byWeek, districtFor, geoMatch, geoParts, isGeoFiltered, ltrSurveys, pool, weekOf, type GeoFilter } from '@/analytics/ltr';
 import { attributeScores, groupRange, lowest, rangeLabel } from '@/analytics/attributes';
 import { whatChangedSummary } from '@/writing/write';
 import { ATTRIBUTES } from '@/domain/attributes';
@@ -68,6 +68,7 @@ export function plan(question: string, ctx: Pick<AskContext, 'fw' | 'benchmark' 
   if (p.from > p.to) [p.from, p.to] = [p.to, p.from];
 
   // geography (question overrides the filter bar)
+  if ((m = /\b(north|south|west)(?:ern)? division\b|\bdivision (north|south|west)\b/.exec(q))) p.geo = { ...p.geo, division: (m[1] ?? m[2]).toUpperCase(), region: null, district: null, store: null };
   if ((m = /\b(?:region\s*|r)(\d{1,2})\b/.exec(q)) && (REGIONS as readonly string[]).includes(normalizeRegion(m[1]))) p.geo = { region: normalizeRegion(m[1]), district: null, store: null };
   if ((m = /\bdistrict\s+([\w-]+)/.exec(q))) p.geo = { ...p.geo, district: m[1].toUpperCase() === 'UNMAPPED' ? UNMAPPED : m[1].toUpperCase(), store: null };
   if ((m = /\b(?:store\s*#?\s*|#)(\d{3,4})\b/.exec(q))) p.geo = { ...p.geo, store: m[1].padStart(4, '0') };
@@ -98,7 +99,7 @@ const pct = (x: number | null, d = 1) => (x === null ? '—' : `${x.toFixed(d)}%
 const sfx = (s: LtrSummary, t: SampleThresholds) => { const l = SAMPLE_FLAG_LABEL[sampleFlag(s.n, t)]; return l && l !== 'Strong' ? ` · ${l.toLowerCase()}` : ''; };
 const ltrText = (s: LtrSummary, t: SampleThresholds) => `${pct(s.pct)} (n=${s.n}${sfx(s, t)})`;
 const weeksLabel = (p: Plan) => (p.from === p.to ? `FW${p.from}` : `FW${p.from}–FW${p.to}`);
-const geoLabel = (g: GeoFilter, ds: Dataset) => [g.region, g.district, g.store ? storeLabel(g.store, ds.stores) : null].filter(Boolean).join(' › ') || 'All regions';
+const geoLabel = (g: GeoFilter, ds: Dataset) => geoParts(g, (no) => storeLabel(no, ds.stores)).join(' › ') || 'All regions';
 const table = (columns: string[], rows: Cell[][]): TableData => ({ columns, rows });
 /** 95% margin of error for a proportion, in points. */
 const margin = (s: LtrSummary) => (s.n && s.pct !== null ? 1.96 * Math.sqrt((s.pct / 100) * (1 - s.pct / 100) / s.n) * 100 : null);
@@ -199,7 +200,7 @@ export function answer(question: string, ctx: AskContext): Answer {
 
     case 'attributes': {
       const fw = p.to;
-      const sc = attributeScores(ltr.filter((s) => s.fw === fw), ds.attributeWeekly.filter((a) => a.fw === fw), !!(p.geo.region || p.geo.district || p.geo.store));
+      const sc = attributeScores(ltr.filter((s) => s.fw === fw), ds.attributeWeekly.filter((a) => a.fw === fw), isGeoFiltered(p.geo));
       if (sc.every((a) => a.n === 0)) return notLoaded('Attribute data', { ...p, from: fw, to: fw }, ds);
       const out: string[] = [];
       if (p.attribute) {
@@ -230,7 +231,7 @@ export function answer(question: string, ctx: AskContext): Answer {
 
     case 'theme': {
       const th = p.theme!;
-      const geoIds = new Set(ds.surveys.filter((s) => (!p.geo.region || s.region === p.geo.region) && (!p.geo.store || s.storeNo === p.geo.store) && (!p.geo.district || districtFor(s.storeNo, ds.stores) === p.geo.district)).map((s) => s.id));
+      const geoIds = new Set(ds.surveys.filter((s) => geoMatch(s, p.geo, ds.stores)).map((s) => s.id));
       const st = ds.tagList.filter((t) => t.channel === 'survey' && t.fw >= p.from && t.fw <= p.to && geoIds.has(t.recordId) && (t.primary === th || t.secondary.includes(th)));
       if (!st.length && !inRange.length) return notLoaded('Data', p, ds);
       const pos = st.filter((t) => t.sentiment === 'Positive').length, neg = st.filter((t) => t.sentiment === 'Negative').length;

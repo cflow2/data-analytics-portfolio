@@ -108,3 +108,19 @@ describe('YTD source', () => {
     expect([y.source, y.display, y.n]).toEqual(['Entered', 93, 3600]);
   });
 });
+
+describe('restated weeks', () => {
+  it('flags a presented week whose survey count or LTR changed', async () => {
+    const { restatedWeeks } = await import('./model');
+    const all = fw41Fixture();
+    const presented = slideMetrics(all, 40);
+    const snaps = [{ fw: 40, savedAt: '2026-11-11', metrics: presented }];
+    expect(restatedWeeks(snaps, all, [38, 39, 40, 41])).toEqual([]);
+    const fewer = all.filter((s, i) => !(s.fw === 40 && i % 30 === 0));
+    const r = restatedWeeks(snaps, fewer, [38, 39, 40, 41]);
+    expect(r).toHaveLength(1);
+    expect(r[0].fw).toBe(40);
+    expect(r[0].was.n).toBe(127);
+    expect(r[0].now.n).toBeLessThan(127);
+  });
+});

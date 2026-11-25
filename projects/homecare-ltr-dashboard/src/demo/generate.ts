@@ -8,7 +8,7 @@ import { weekStart, DEFAULT_FY_START } from '@/lib/fiscal';
 import { REGIONS } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AttributeKey, FollowUpRecord, LeadershipQuestion, Sentiment,
+  AppointmentRecord, AttributeKey, FollowUpRecord, LeadershipQuestion, Sentiment,
   StoreRecord, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
@@ -19,6 +19,8 @@ export interface DemoData {
   stores: StoreRecord[];
   surveys: SurveyRecord[];
   followups: FollowUpRecord[];
+  /** appointment file: Appointment ID → RedVest Associate (2–3 per store) */
+  appointments: AppointmentRecord[];
   tags: ThemeTag[];
   weeks: WeekMeta[];
   questions: LeadershipQuestion[];
@@ -224,6 +226,7 @@ function assignAttributes(rng: Rng, surveys: SurveyRecord[], targets?: Record<At
 }
 
 // ───────────────────────────── follow-ups ─────────────────────────────
+const ASSOC_FIRST = ['Rowan', 'Quinn', 'Harper', 'Reese', 'Skyler', 'Jordan', 'Morgan', 'Taylor', 'Parker', 'Sawyer', 'Emerson', 'Hayden', 'Kendall', 'Logan', 'Peyton', 'River', 'Sage', 'Tatum'];
 const SM_NAMES = ['DEMO SM Avery', 'DEMO SM Blake', 'DEMO SM Casey', 'DEMO SM Devon', 'DEMO SM Emery', 'DEMO SM Finley', 'DEMO SM Gray'];
 const DOCUMENTED = [
   'Called member on {d}; apologized and scheduled a return visit to finish the service.',
@@ -336,5 +339,15 @@ export function generateDemoData(seed = 4040): DemoData {
     { id: 'demo-q-2', fw: 39, question: 'Which regions are below 93?', answered: false, createdAt: '2026-11-04T15:05:00.000Z' },
   ];
 
-  return { stores, surveys, followups, tags, weeks, questions };
+  // Appointments (separate seed, so survey numbers never change): 2–3 RedVest Associates per store.
+  const arng = new Rng(seed + 7);
+  let nth = 0;
+  const assocName = () => { const n = nth++; return `DEMO ${ASSOC_FIRST[n % ASSOC_FIRST.length]} ${String.fromCharCode(65 + (Math.floor(n / ASSOC_FIRST.length) % 26))}${String.fromCharCode(65 + (Math.floor(n / (ASSOC_FIRST.length * 26)) % 26))}.`; };
+  const crew = new Map(stores.map((st) => [st.storeNo, Array.from({ length: arng.int(2, 3) }, assocName)]));
+  const appointments: AppointmentRecord[] = surveys.filter((s) => s.appointmentId).map((s) => ({
+    id: s.appointmentId!, jobId: `DEMO-J-${s.appointmentId!.slice(7)}`, associate: arng.pick(crew.get(s.storeNo) ?? ['DEMO Unassigned']),
+    storeNo: s.storeNo, date: s.date, fw: s.fw, sourceFile: DEMO_SOURCE, demo: true,
+  }));
+
+  return { stores, surveys, followups, tags, weeks, questions, appointments };
 }

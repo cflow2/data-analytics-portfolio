@@ -10,6 +10,8 @@ export interface DetractorRow {
   storeNo: string;
   region: string;
   district: string;
+  /** RedVest Associate from the appointment file, when loaded */
+  associate?: string;
   score: number;
   band: DetractorBand;
   comment: string;
@@ -36,7 +38,7 @@ export function detractorRows(
       const followUp: FollowUpStatus = fu?.status ?? 'Missing';
       const daysSince = Math.max(0, diffDays(today, s.date));
       return {
-        id: s.id, date: s.date, fw: s.fw, storeNo: s.storeNo, region: s.region, district: districtFor(s.storeNo, stores),
+        id: s.id, date: s.date, fw: s.fw, storeNo: s.storeNo, region: s.region, district: districtFor(s.storeNo, stores), associate: s.associate,
         score: s.ltr!, band: detractorBand(s.ltr!)!, comment: s.comment, rootCause: tag?.primary ?? null, rootCauseSource: tag?.source,
         followUp, followUpId: fu?.id, smInsight: fu?.insights ?? '', daysSince,
         overdue: followUp !== 'Documented' && diffDays(today, addDays(s.date, 2)) >= 0,

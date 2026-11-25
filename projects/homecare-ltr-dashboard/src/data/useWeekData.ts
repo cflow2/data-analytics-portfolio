@@ -3,7 +3,7 @@ import { useDataset, type Dataset } from './dataset';
 import { useSelectedWeek } from '@/hooks/useWeek';
 import { useFilters, type Filters } from '@/state/filters';
 import { useSettings } from '@/state/settings';
-import { byWeek, ltrSurveys, weekOf, type GeoFilter } from '@/analytics/ltr';
+import { byWeek, isGeoFiltered, ltrSurveys, weekOf, type GeoFilter } from '@/analytics/ltr';
 import { attributeScores, type AttributeScore } from '@/analytics/attributes';
 import type { LtrSummary } from '@/lib/ltr';
 import type { FiscalWeekInfo } from '@/lib/fiscal';
@@ -32,8 +32,8 @@ export function useWeekData(): { data: WeekData | undefined; loading: boolean; e
   const benchmark = useSettings((s) => s.benchmark);
   const data = useMemo<WeekData | undefined>(() => {
     if (!ds) return undefined;
-    const geo: GeoFilter = { region: filters.region, district: filters.district, store: filters.store };
-    const geoFiltered = !!(geo.region || geo.district || geo.store);
+    const geo: GeoFilter = { division: filters.division, region: filters.region, district: filters.district, store: filters.store, associate: filters.associate };
+    const geoFiltered = isGeoFiltered(geo);
     const ltr = ltrSurveys(ds.surveys, geo, ds.stores);
     const weekly = byWeek(ltr);
     const attrsFor = (fw: number) => attributeScores(ltr.filter((s) => s.fw === fw), ds.attributeWeekly.filter((a) => a.fw === fw), geoFiltered);
