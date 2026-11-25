@@ -46,6 +46,7 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   check('FW40 LTR 94.7% n=131', /94\.7%\s*n=131/.test(t));
   check('Detractors 7 of 131, 2 at 0–6', /7\s*of 131/.test(t) && /2 scored 0–6/.test(t));
   check('FYTD 93.1% on n=3,736', /93\.1%\s*n=3,736/.test(t));
+  check('Command Center shows the week in progress (FW41 so far, n=12)', /FW41 so far · Nov 7–Nov 8 \(2 days\) · current week/i.test(t) && /83\.3%\s*n=12/.test(t), (t.match(/FW41 so far[^\n]*/i) ?? [""])[0]);
 
   // 2. Demo source files → import → same numbers; re-upload no duplicates
   const files = [];

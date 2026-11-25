@@ -97,3 +97,51 @@ describe('Medallia expanded view (YTD)', () => {
     expect(parseFile(req('Analytics - 2026-11-23T114201.994.xlsx', file(REAL))).build!.medalliaRange ?? null).toBeNull();
   });
 });
+
+describe('Medallia Analytics split by week (“Week of 07/26” columns)', () => {
+  // Transcribed from a screenshot of the real export (first 12 weeks, values rounded as shown).
+  const WEEKS = ['07/26', '08/02', '08/09', '08/16', '08/23', '08/30', '09/06', '09/13', '09/20', '09/27', '10/04', '10/11'];
+  const aoa: unknown[][] = [
+    [null, ...WEEKS.map((w) => `Week of\n${w}`)],
+    ['Sample Size', 25, 89, 121, 115, 95, 125, 126, 125, 128, 173, 166, 171],
+    ['Likelihood to Recommend (LTR)', 88, 95.50561798, 95.8677686, 92.17391304, 95.78947368, 93.6, 90.47619048, 90.4, 93.75, 90.1734104, 93.37349398, 92.39766082],
+    [],
+    ['Drivers of LTR'],
+    ['Project Value', 88, 94.38202247, 91.73553719, 93.04347826, 93.68421053, 92.8, 87.3015873, 88.8, 89.84375, 89.59537572, 93.37349398, 89.47368421],
+    ['Ease of Scheduling Your Project', 88, 88.76404494, 93.38842975, 94.7826087, 92.63157895, 93.6, 86.50793651, 87.2, 86.71875, 85.54913295, 90.36144578, 88.30409357],
+    ['Project Quality', 88, 95.50561798, 97.52066116, 96.52173913, 98.94736842, 96, 92.06349206, 92.8, 93.75, 93.06358382, 93.97590361, 95.32163743],
+    ['Amount of Time It Took to Complete Your Project', 84, 96.62921348, 94.21487603, 94.7826087, 89.47368421, 94.4, 88.88888889, 90.4, 89.0625, 89.01734104, 91.56626506, 88.88888889],
+    ['Ease of Process', 88, 85.39325843, 86.7768595, 82.60869565, 88.42105263, 89.6, 81.74603175, 83.2, 82.03125, 85.54913295, 84.93975904, 90.64327485],
+    ['The Overall HomeCare+ Subscription', 88, 89.88764045, 90.90909091, 90.43478261, 90.52631579, 91.2, 83.33333333, 85.6, 87.5, 84.39306358, 91.56626506, 89.47368421],
+    [],
+    ['HomeCare+ Associate'],
+    ['Craftsmanship', 88, 97.75280899, 99.17355372, 97.39130435, 100, 96.8, 93.65079365, 96, 94.53125, 93.6416185, 96.38554217, 95.90643275],
+    ['Professionalism', 96, 97.75280899, 99.17355372, 100, 100, 98.4, 97.61904762, 96, 94.53125, 97.10982659, 97.59036145, 97.66081871],
+    ['Knowledge', 88, 96.62921348, 99.17355372, 97.39130435, 98.94736842, 96.8, 93.65079365, 96.8, 95.3125, 94.79768786, 96.98795181, 96.49122807],
+  ];
+  const p = parseFile(req('Analytics - 2026-11-25T181708.000.xlsx', file(aoa)));
+  const aw = p.build!.attributeWeekly;
+  const get = (fw: number, attr: string) => aw.find((a) => a.fw === fw && a.attr === attr)!;
+  it('maps each “Week of” column to the fiscal week sharing 6 of its 7 days', () => {
+    expect(p.candidate?.kind).toBe('medallia-analytics');
+    expect(Object.keys(p.build!.report.weeks).map(Number)).toEqual([26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37]);
+    expect(p.build!.report.dateRange).toEqual(['2026-07-26', '2026-10-17']);
+    expect(p.build!.report.warnings.join(' ')).toMatch(/start 1 day after the fiscal week .* \(6 of 7\)/);
+    expect(p.build!.report.warnings.join(' ')).not.toMatch(/Partial week/);
+    expect(p.build!.report.info!.join(' ')).toMatch(/Jul 26 → FW26/);
+  });
+  it('keeps every value and sample size', () => {
+    expect(get(37, 'scheduling')).toMatchObject({ n: 171 });
+    expect(get(37, 'scheduling').pct).toBeCloseTo(88.30409357, 6);
+    expect(get(26, 'timeToAppt').pct).toBe(84);
+    expect(get(35, 'professionalism').pct).toBeCloseTo(97.10982659, 6);
+    expect(get(33, 'ltr')).toMatchObject({ pct: 90.4, n: 125 });
+    expect(aw.filter((a) => a.fw === 30)).toHaveLength(10); // LTR + nine attributes
+  });
+  it('works out the year across New Year and for “Week ending”', () => {
+    const r = resolvePeriodColumns([null, 'Week of 12/20', 'Week of 12/27', 'Week of 01/03'], '2027-01-12', DEFAULT_FY_START);
+    expect(r.periods.map((x) => x.date)).toEqual(['2026-12-20', '2026-12-27', '2027-01-03']);
+    const e = resolvePeriodColumns([null, 'Week ending 11/20'], '2026-11-25', DEFAULT_FY_START);
+    expect(e.periods[0]).toMatchObject({ date: '2026-11-14', fw: 42, offset: 0 });
+  });
+});

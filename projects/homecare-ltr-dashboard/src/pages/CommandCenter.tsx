@@ -12,7 +12,8 @@ import { detractorRows } from '@/analytics/detractors';
 import { ruleHeadline } from '@/analytics/headline';
 import { themeName } from '@/domain/taxonomy';
 import { regionSortKey } from '@/domain/geo';
-import { todayISO } from '@/lib/dates';
+import { monthDay, todayISO } from '@/lib/dates';
+import { weekToDate, type WeekToDate } from '@/analytics/weekToDate';
 import { canColor } from '@/lib/ltr';
 import { useSettings } from '@/state/settings';
 import { useUi } from '@/state/ui';
@@ -62,6 +63,7 @@ export function CommandCenter() {
   const s = SCREENS[0];
   const { data, loading, error } = useWeekData();
   const thresholds = useSettings((x) => x.thresholds);
+  const fyStart = useSettings((x) => x.fyStart);
   const { search } = useLocation();
 
   const m = useMemo(() => {
@@ -139,8 +141,9 @@ export function CommandCenter() {
         topDetractorTheme: topDet ? { name: themeName(topDet[0]), count: topDet[1] } : undefined,
       }),
       ltrN: ltr.length,
+      wtd: weekToDate(ltr, benchmark, fyStart),
     };
-  }, [data, thresholds]);
+  }, [data, thresholds, fyStart]);
 
   const empty = !!data && !!m && m.cur.n === 0;
   const cmpLabel = m?.base.label ?? '';
@@ -152,6 +155,7 @@ export function CommandCenter() {
         {data && m && (
           <div className="space-y-3">
             {data.geoFiltered && <p className="text-xs text-muted">Filtered to {geoParts(data.geo).join(' › ')}.</p>}
+            {m.wtd && <WeekSoFar w={m.wtd} benchmark={data.benchmark} selectedFw={m.fw} />}
             <div className="grid grid-cols-4 gap-3">
               <KpiCard label={`LTR · FW${m.fw}`} value={m.cur.pct === null ? '—' : `${m.cur.pct.toFixed(1)}%`} n={m.cur.n}
                 delta={deltaPts(m.cur, m.base.summary)} compareLabel={`${cmpLabel} (n=${m.base.summary.n})`} spark={m.ltrSpark} sparkFaded={m.ltrFaded} />
@@ -226,5 +230,36 @@ export function CommandCenter() {
         )}
       </PageGate>
     </>
+  );
+}
+
+/** Where the week in progress stands: LTR so far, the same days of last week, and the 0–8 budget left at 93. */
+function WeekSoFar({ w, benchmark, selectedFw }: { w: WeekToDate; benchmark: number; selectedFw: number }) {
+  const pct = w.s.pct;
+  const above = pct !== null && pct >= benchmark;
+  const dd = w.samePoint.pct !== null && pct !== null ? pct - w.samePoint.pct : null;
+  const left = w.left;
+  return (
+    <section aria-label={`FW${w.fw} so far`} className={cx('rounded-[12px] border bg-surface p-4', above ? 'border-grow' : 'border-surveys')}>
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+        <div>
+          <div className="text-xs font-medium uppercase tracking-wide text-muted">FW{w.fw} {w.inProgress ? 'so far' : ''} · {monthDay(w.from)}–{monthDay(w.through)} ({w.days} day{w.days === 1 ? '' : 's'}){w.fw !== selectedFw ? ' · current week' : ''}</div>
+          <div className="flex items-baseline gap-2">
+            <span className={cx('font-display text-3xl font-semibold tnum', above ? 'text-grow' : 'text-surveys')}>{pct === null ? '—' : `${pct.toFixed(1)}%`}</span>
+            <span className="text-sm text-muted tnum">n={w.s.n} · {above ? 'at or above' : 'below'} {benchmark}</span>
+          </div>
+        </div>
+        <div className="text-sm tnum">
+          <div><b>{w.s.detractors}</b> scored 0–8 so far ({w.s.detractors0to6} at 0–6)</div>
+          {w.samePoint.n > 0 && <div className="text-muted">Same point last week: {w.samePoint.pct!.toFixed(1)}% on {w.samePoint.n}{dd !== null ? ` (${dd >= 0 ? '▲' : '▼'} ${Math.abs(dd).toFixed(1)} pts)` : ''}</div>}
+        </div>
+        {w.allowed !== null && w.typicalN !== null && (
+          <div className={cx('text-sm tnum', left !== null && left < 0 ? 'text-surveys' : '')}>
+            At a typical {Math.max(w.typicalN, w.s.n)} surveys the week can take <b>{w.allowed}</b> scores of 0–8 and stay at {benchmark}:{' '}
+            <b>{left! >= 0 ? `${left} left` : `${-left!} over`}</b>.
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

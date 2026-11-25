@@ -11,7 +11,7 @@ import { ATTRIBUTES } from '@/domain/attributes';
 import type {
   AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, SubscriptionSnapshot, SubscriptionWeek, OriginalText, StoreRecord, SurveyRecord, SurveySource,
 } from '@/domain/types';
-import { addDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
+import { addDays, diffDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
   cellText, cleanComment, hashString, normalizeApptId, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
@@ -393,9 +393,16 @@ function buildAnalyticsLong(ctx: Ctx, rows: unknown[][], map: Record<string, num
 const DAY_HEADER = /^\s*(\d{1,2})\s+(sat|sun|mon|tue|wed|thu|fri)[a-z]*\.?\s*$/i;
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 const MONTH_HEADER = /^\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s,'-]+(\d{4}|\d{2})\s*$/i;
+/** “Week of 07/26”, “Week of\n07/26/2026”, “Week ending 08/01” */
+const WEEK_OF_HEADER = /^\s*week\s+(of|ending|beginning|starting)\s+(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s*$/i;
 const DOW: Record<string, number> = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
 
-interface PeriodCol { col: number; fw: number; date?: ISODate; /** month columns span several weeks: used for the range total only */ end?: ISODate; month?: boolean }
+interface PeriodCol {
+  col: number; fw: number; date?: ISODate;
+  /** month columns span several weeks: used for the range total only */ end?: ISODate; month?: boolean;
+  /** a whole 7-day week column ("Week of 07/26"); `offset` = days it starts after the fiscal week (Medallia Sun–Sat = 1) */
+  week?: boolean; offset?: number;
+}
 interface WideLayout {
   sheet: Sheet;
   headerIndex: number;
@@ -415,6 +422,7 @@ function dateFromFileName(name: string): ISODate | null {
  * day on or before the export date (file name timestamp, else today), then step forward one day per column.
  */
 export function resolvePeriodColumns(header: unknown[], refDate: ISODate, fyStart: ISODate): { periods: PeriodCol[]; totalCol: number | null; anchorNote?: string } {
+  let prevWeek: ISODate | null = null;
   const periods: PeriodCol[] = [];
   let totalCol: number | null = null;
   let prev: ISODate | null = null;
@@ -437,6 +445,23 @@ export function resolvePeriodColumns(header: unknown[], refDate: ISODate, fyStar
         if (d) anchorNote = `Day columns have no month or year; dated from ${monthDay(refDate)}, ${refDate.slice(0, 4)}, so “${t}” = ${monthDay(d)}, ${d.slice(0, 4)}.`;
       }
       if (d) { periods.push({ col, fw: fiscalWeek(d, fyStart), date: d }); prev = d; }
+      return;
+    }
+    const wo = WEEK_OF_HEADER.exec(t);
+    if (wo) {
+      // No year: the first column is the latest such date on or before the export date; later columns move forward.
+      const md = `${wo[2].padStart(2, '0')}-${wo[3].padStart(2, '0')}`;
+      const inYear = (y: number) => `${y}-${md}`;
+      const d: ISODate | null = wo[4] ? parseDateCell(inYear(wo[4].length === 2 ? 2000 + Number(wo[4]) : Number(wo[4])))
+        : prevWeek ? (inYear(Number(prevWeek.slice(0, 4))) >= prevWeek ? inYear(Number(prevWeek.slice(0, 4))) : inYear(Number(prevWeek.slice(0, 4)) + 1))
+          : inYear(Number(refDate.slice(0, 4))) <= refDate ? inYear(Number(refDate.slice(0, 4))) : inYear(Number(refDate.slice(0, 4)) - 1);
+      if (!d) return;
+      const start = /ending/i.test(wo[1]) ? addDays(d, -6) : d;
+      // Assign to the fiscal week holding most of its days (its middle day); Medallia's Sun–Sat weeks overlap 6 of 7.
+      const fw = fiscalWeek(addDays(start, 3), fyStart);
+      const offset = diffDays(start, weekStart(fw, fyStart));
+      periods.push({ col, fw, date: start, end: addDays(start, 6), week: true, offset });
+      prevWeek = d;
       return;
     }
     const mm = MONTH_HEADER.exec(t);
@@ -525,7 +550,7 @@ function buildAnalyticsWide(ctx: Ctx, w: WideLayout): { aw: AttributeWeekly[]; r
   // Whole-range LTR: Medallia's Total column when present, else Sample-Size-weighted across every column.
   let range: MedalliaRange | null = null;
   const ltrRow = measures.find((m) => m.attr === 'ltr')?.row;
-  const fwsAll = w.periods.flatMap((p) => [p.fw, ...(p.end ? [fiscalWeek(p.end, ctx.fyStart)] : [])]).filter((fw) => fw >= 1 && fw <= 52);
+  const fwsAll = w.periods.flatMap((p) => [p.fw, ...(p.end && p.month ? [fiscalWeek(p.end, ctx.fyStart)] : [])]).filter((fw) => fw >= 1 && fw <= 52);
   if (ltrRow && fwsAll.length && (w.periods.length > 7 || w.periods.some((p) => p.month) || new Set(fwsAll).size > 1)) {
     const scale = scaleOf(ltrRow);
     const total = w.totalCol !== null ? parseNumber(ltrRow[w.totalCol]) : null;
@@ -544,8 +569,19 @@ function buildAnalyticsWide(ctx: Ctx, w: WideLayout): { aw: AttributeWeekly[]; r
   const outside = w.periods.filter((p) => p.fw < 1 || p.fw > 52).length;
   if (outside) drop(ctx.report, 'Column outside the fiscal year');
   if (w.anchorNote) ctx.report.warnings.push(w.anchorNote);
+  const weekCols = w.periods.filter((p) => p.week);
+  if (weekCols.length) {
+    const fmt = (p: PeriodCol) => `${monthDay(p.date!)} → FW${p.fw}`;
+    (ctx.report.info ??= []).push(`“Week of” columns mapped to fiscal weeks: ${weekCols.length > 6 ? `${fmt(weekCols[0])}, ${fmt(weekCols[1])} … ${fmt(weekCols[weekCols.length - 1])}` : weekCols.map(fmt).join(', ')}.`);
+    const off = weekCols.find((p) => p.offset);
+    if (off) ctx.report.warnings.push(`Medallia's weeks start ${off.offset! > 0 ? `${off.offset} day${off.offset === 1 ? '' : 's'} after` : `${-off.offset!} day${off.offset === -1 ? '' : 's'} before`} the fiscal week (fiscal weeks run Sat–Fri). Each “Week of” column was assigned to the fiscal week sharing most of its days (${7 - Math.abs(off.offset!)} of 7), so weekly values can differ slightly from fiscal-week totals. For exact fiscal weeks, export the Analytics report split by day.`);
+    const lastCol = weekCols[weekCols.length - 1];
+    const ref = dateFromFileName(ctx.fileName);
+    if (ref && lastCol.end! >= ref) ctx.report.warnings.push(`The last column (week of ${monthDay(lastCol.date!)}, FW${lastCol.fw}) was still in progress when exported, so it covers only part of the week.`);
+  }
   if (weeks.length > 1 || w.periods.some((p) => p.date)) {
-    const partial = weeks.filter((fw) => w.periods.filter((p) => p.fw === fw && p.date).length > 0 && w.periods.filter((p) => p.fw === fw).length < 7);
+    const isDay = (p: PeriodCol) => !!p.date && !p.week && !p.month;
+    const partial = weeks.filter((fw) => w.periods.some((p) => p.fw === fw && isDay(p)) && w.periods.filter((p) => p.fw === fw && isDay(p)).length < 7);
     if (partial.length) ctx.report.warnings.push(`Partial week(s) in this export: ${partial.map((x) => `FW${x}`).join(', ')}. Values cover only the days present.`);
   }
   if (!sizeRow) ctx.report.warnings.push('No Sample Size row: days are weighted equally and n is unknown.');
