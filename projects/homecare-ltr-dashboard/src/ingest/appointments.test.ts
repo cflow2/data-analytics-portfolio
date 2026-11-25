@@ -30,6 +30,25 @@ describe('appointment file → associate', () => {
     expect(p.build!.report.warnings.join(' ')).toMatch(/more than one associate/);
     expect(p.build!.report.dropped['No Appointment ID']).toBe(1);
   });
+  it('reads customer name (full or first + last), phone and Job ID for the SM email', () => {
+    const p = parseFile(req('Appointments_Nov.xlsx', book([
+      ['Appointment ID', 'Associate', 'Job ID', 'First Name', 'Last Name', 'Phone Number'],
+      ['1', 'Pat Example', 'SA000000000009', 'Avery', 'Sample', '555.555.0109'],
+      ['2', 'Pat Example', '', '', '', ''],
+    ])));
+    const [a, b] = p.build!.appointments!;
+    expect(a).toMatchObject({ customerName: 'Avery Sample', customerPhone: '(555) 555-0109', jobId: 'SA000000000009' });
+    expect(b.customerName).toBeUndefined();
+    expect(b.customerPhone).toBeUndefined();
+  });
+  it('Medallia “Project number” becomes the survey Job ID', () => {
+    const p = parseFile(req('Responses_Export.xlsx', book([
+      ['Date Only', 'Likelihood to Recommend', 'Store #', 'Project number', 'Customer Name'],
+      ['11/10/2026', 4, 2702, 'SA000000000007', 'DEMO Riley Example'],
+    ])));
+    expect(p.candidate?.kind).toBe('medallia-responses');
+    expect(p.build!.surveys![0]).toMatchObject({ jobId: 'SA000000000007', customerName: 'DEMO Riley Example' });
+  });
   it('a file with other names opens the mapping dialog', () => {
     const p = parseFile(req('Appointments.xlsx', book([['Appointment ID', 'Crew Lead'], ['1', 'A']])));
     expect(p.candidate?.kind).toBe('appointments');

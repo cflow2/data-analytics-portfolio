@@ -70,13 +70,13 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 | File | Detected by | Notes |
 |---|---|---|
 | LTR Tracker (`LTR_Tracker*.xlsx`) | sheet `Export Data`, header found on row 3 | ~330 columns from all Lowe's survey programs; uses Surveyid, Lowe's Region, Store # (+ `Store` for city/state), Date Only, Appointment ID, Likelihood to Recommend (col “Likelihood to Recommend”, which equals the HomeCare+ LTR question wherever both are filled), ` Score`, FW # and the HomeCare+ comment. **Attributes are never taken from the Tracker** (its similarly named columns belong to other programs). Also reads the hidden `Servicing Selling Stores` (store → district), `Detractors` (SM follow-up) and `Fiscal Calendar` (checked against the app's calendar) sheets; other sheets are not converted, which keeps a 20 MB Tracker to ~2–3 s. Formula-only rows are ignored. |
-| Medallia Responses export | header on row 2 | Adds comments and the nine attributes. Merged into the matching Tracker survey (by ID, appointment, or date+store+score); never counted in LTR. |
+| Medallia Responses export | header on row 2 | Adds comments, the nine attributes, and `Project number` as the Job ID (plus customer name/phone if the export has them). Merged into the matching Tracker survey (by ID, appointment, or date+store+score); never counted in LTR. |
 | Medallia Analytics driver report (`Analytics - <timestamp>.xlsx`) | rows = measures, columns = days (`14 Sat` … `20 Fri`, `Total`, `Benchmark`), weeks (`FW40`, `Week of 07/26`, `Week ending 08/01`) or months (`Nov 2026`); a long `FW, Attribute, Top 2 Box %, n` layout also works | Day columns are dated from the export timestamp in the file name and rolled up to fiscal weeks weighted by each day's Sample Size (this reproduces Medallia's Total). “Week of” columns carry no year: the first is the latest such date on or before the export date, later ones move forward (across New Year too). Medallia's weeks run Sun–Sat, one day after the fiscal week (Sat–Fri), so each is assigned to the fiscal week sharing 6 of its 7 days and the report says so; for exact fiscal weeks, export split by day. A last week still in progress is flagged. Medallia labels map to the nine attributes (Project Value → Value for money, Ease of Process → Ease of process prior, Amount of Time… → Time to get an appointment, …). n = Sample Size. The LTR row is cross-checked against the Tracker; Benchmark is ignored. |
 | Customer Commentary | header on row 2; `date, score, comment` | Fills comments on matching Tracker surveys. |
 | Detractor follow-up (`FW40.xlsx`, or the Tracker's `Detractors` tab) | `LL, Score, Comment, Store, SM, Insights, Region, FW, FQ, FP` (header on row 1) | Insights → **Documented** only when contact with the member is described (called, contacted, spoke, left a voicemail, “customer confirmed…”); emails, plans (“I will call…”, “store asked to contact…”) and internal reviews/coaching → **Email only**; blank → **Missing**; detractors absent from the file → **Missing**. Names in the SM column are redacted wherever they appear. FQ/FP are checked against the calendar. |
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
 | HomeCare+ subscription export (`data - <timestamp>.xlsx`, sheet *Export*) | `Store, Week, Net MLRHC+ Subscriptions, Net MLRHC+ Store Subscriptions` (+ online, revenue, store set, division, region, district, Completed Appointments, Regular, Assessments, Follow UP, Exceptions, Follow Up Required) | One row per store per fiscal week, year to date; the trailing "Applied filters" row is skipped. Each upload replaces that fiscal year's weeks **and saves a snapshot** of the current and prior week by store. The export time in the file name sets the snapshot's *data-through* date (the day before). Upload it every morning: yesterday's sales = this snapshot's week-to-date minus the previous one; "same point last week" = the snapshot from 7 days earlier. |
-| Appointment file (RedVest Associate) | `Appointment ID` + `Associate` required; `Job ID`, `Store #`, `Appointment date` optional (common names such as *Appt ID*, *Technician Name*, *Job #*, *Service Date* are recognised; otherwise map the columns once) | Links each survey to its associate by Appointment ID, whichever file is loaded first. The report says how many loaded surveys were linked. If one Appointment ID lists two associates, the first is kept and the conflict is reported. |
+| Appointment file (RedVest Associate) | `Appointment ID` + `Associate` required; `Job ID`, `Store #`, `Appointment date`, `Customer Name` (or `First Name` + `Last Name`) and `Customer Phone` optional (common names such as *Appt ID*, *Technician Name*, *Job #*, *Service Date* are recognised; otherwise map the columns once) | Links each survey to its associate by Appointment ID, whichever file is loaded first. The report says how many loaded surveys were linked. If one Appointment ID lists two associates, the first is kept and the conflict is reported. Customer name, phone and Job ID are used only by **Email SM** on the Detractors screen. |
 
 Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, notes, headline or slide edits (exports still work; untagged records still get their first rule tags).
 
@@ -92,6 +92,7 @@ Each import produces a **validation report**: rows read/kept/dropped and why, da
 - Original text is stored only in IndexedDB (`originals` table). The UI shows redacted text; "Show original" relocks after 60 s and is unavailable in Presentation mode.
 - Text where PII may remain (e.g. "spoke with bob jones") is flagged for the Review Queue.
 - The JSON backup contains original text — keep it on the work laptop.
+- **Customer name and phone** (appointment file, or a Medallia export that has them, or typed in the email composer) stay in IndexedDB and appear only inside the **Email SM** composer, never on screens, tables, exports or in Presentation mode. The composer quotes the customer's **original** comment, because the store needs the exact words; it reaches Outlook only when you click Copy.
 - **RedVest Associate names** from the appointment file may appear anywhere: screens, filters, tables, exports and Presentation mode (decision of 11/25/2026). Names written *inside* comment text are still redacted.
 
 ## Theme tagging (rules engine)
@@ -117,6 +118,44 @@ Every survey that scores 0–8 costs 100 ÷ n points of LTR (0.5 pts when n = 20
 ## Services members want added
 
 **VOC Themes → Services members want added** ranks services outside the standard visit (tankless and gas water heaters, roof-vented dryer vents, second-story work, gutters, light fixtures, garage doors, detectors…) by how many members mention them. A mention only counts when the comment asks for the service or says it wasn't covered (or is tagged Service-add or Exclusions), so “they changed my HVAC filter” doesn't count. It shows asked-to-add vs told-not-covered, this week, % that still scored 9–10, and when it was last seen, for FYTD, 13 weeks or the week. Click a service for its comments; the table exports to CSV/Excel. The service list lives in `src/analytics/serviceRequests.ts`.
+
+## Email the store manager (Detractors)
+
+Every detractor row has **Email SM**. It opens a composer with the email laid out like the standard store manager note:
+
+- the greeting with the SM's first name
+- the bold score, customer and associate, with the appointment date
+- the customer's exact comment in italics, inside quotes
+- **Customer Information**: name, phone, store and city, associate, Job ID
+- the request: contact the customer, review the feedback with the associate, and send back what was done
+- **Thank You,** and your signature
+
+**Where the fields come from:**
+
+| Field | Source |
+|---|---|
+| Score and comment | The Tracker. The comment is the original text, not the redacted one. |
+| Store and city | The store list. |
+| SM name | The follow-up file's SM column for that survey, or else the store's most recent SM. |
+| Associate, Job ID, appointment date | The appointment file. Job ID can also come from Medallia `Project number`. |
+| Customer name and phone | The appointment file or the Medallia export, when either carries them. |
+
+**When a field is missing:**
+
+- It shows as a yellow **[placeholder]**, and the composer lists it.
+- Type it into the composer. Your entries are saved for that survey.
+- The middle sentence of the request follows the root cause. For example, a completion gap reads "determine what prevented the requested services from being completed", and appointment management reads "determine what caused the scheduling or arrival issue".
+- You can rewrite the request for one email in the composer.
+
+**Copying:**
+
+- **Copy for Outlook** puts formatted text on the clipboard (bold, italics, bullets), so pasting into a new message keeps the layout.
+- **Copy subject** and **Copy plain text** are also there.
+- After a copy, the row shows "Copied <date>".
+
+**Changing the defaults:** edit the default subject, request wording and signature in **Settings › Store manager email**. The logo isn't included, because Outlook adds it from your own signature.
+
+The code is in `src/writing/smEmail.ts`, and the per-root-cause wording is in `THEME_ASK`.
 
 ## Week in progress
 
@@ -242,6 +281,7 @@ Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `
 | Keyboard navigation; Ctrl+K palette | ✅ | e2e (palette navigation, visible focus, focus moves to content on navigation); drag-reorder has ▲/▼ buttons; Review Queue keys |
 | LTR Slide: FW41 values (91, ▼4, −2, 6 of 14, 20 scored 0–8, allowed 15, 198/11/9, divisions 94/89/87, trend colours) | ✅ | unit `slide/ltrMetrics.test.ts`; also checked against the real Tracker 1123 |
 | LTR Slide exports: combo chart on a secondary axis, drivers chart, talk track + back pocket, no comment parts, PNG 3840×2160 | ✅ | e2e |
+| Detractors › Email SM: score, customer, phone, associate, Job ID, exact quote, Customer Information list; copies formatted HTML + plain text | ✅ | unit `writing/smEmail.test.ts`, e2e |
 | Phone layout: every screen fits an iPhone with no sideways scrolling; menu drawer; full-screen slide | ✅ | e2e `e2e/phone.cjs` |
 | WCAG AA contrast, light and dark (axe) | ✅ | a11y: 15 screens × 2 themes, **no violations of any severity** |
 | No console errors/warnings; strict TS; lint; tests | ✅ | e2e console check; `npm run typecheck`, `npm run lint`, `npm test` |

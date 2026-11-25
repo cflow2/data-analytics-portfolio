@@ -12,7 +12,7 @@ export function demoDataset(): Dataset {
   const tags: ThemeTag[] = [];
   for (const s of d.surveys) { const t = tagRecord({ id: s.id, channel: 'survey', fw: s.fw, text: s.comment }); if (t) tags.push(t); }
   return {
-    surveys: d.surveys, subscriptionWeeks: d.subscriptionWeeks, subscriptionSnapshots: d.subscriptionSnapshots, associates: [], followups: d.followups,
+    surveys: d.surveys, subscriptionWeeks: d.subscriptionWeeks, subscriptionSnapshots: d.subscriptionSnapshots, associates: [], appointments: new Map(), followups: d.followups,
     stores: new Map(d.stores.map((s) => [s.storeNo, s])), tags: new Map(tags.map((t) => [t.recordId, t])), tagList: tags,
     attributeWeekly: [], weeks: new Map(d.weeks.map((w) => [w.fw, w])), files: [],
     taxonomy: DEFAULT_TAXONOMY, questions: d.questions,

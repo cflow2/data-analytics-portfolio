@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { SlideConfigEditor } from '@/components/settings/SlideConfigEditor';
 import { RedactionRulesEditor } from '@/components/data/RedactionRulesEditor';
 import { TaxonomyEditor } from '@/components/voc/TaxonomyEditor';
+import { EmailTemplateEditor } from '@/components/settings/EmailTemplateEditor';
 import { useImports } from '@/state/imports';
 import { useLive } from '@/hooks/useLive';
 import { db } from '@/db/db';
@@ -84,6 +85,9 @@ export function Settings() {
         </Card>
         <Card title="LTR slide: divisions, map and Key Drivers" className="col-span-2">
           <SlideConfigEditor />
+        </Card>
+        <Card title="Store manager email" className="col-span-2">
+          <EmailTemplateEditor />
         </Card>
         <Card title="Theme taxonomy and keyword rules" className="col-span-2">
           <TaxonomyEditor />

@@ -123,8 +123,8 @@ export function demoFiles(d: DemoData = generateDemoData()): DemoFile[] {
   // 5. Appointment file (Appointment ID → RedVest Associate), IDs as text like the real exports
   files.push({
     name: 'HomeCare_Appointments_DEMO.xlsx',
-    data: book([['Appointments', [['Appointment ID', 'Job ID', 'Associate', 'Store #', 'Appointment Date'],
-      ...d.appointments.filter((a) => (a.fw ?? 0) >= 37).map((a) => [a.id, a.jobId, a.associate, Number(a.storeNo), dateCell(a.date!)])]]]),
+    data: book([['Appointments', [['Appointment ID', 'Job ID', 'Associate', 'Store #', 'Appointment Date', 'Customer Name', 'Customer Phone'],
+      ...d.appointments.filter((a) => (a.fw ?? 0) >= 37).map((a) => [a.id, a.jobId, a.associate, Number(a.storeNo), dateCell(a.date!), a.customerName ?? '', a.customerPhone ?? ''])]]]),
   });
 
   // 6. Subscription export (Looker-style, store × week, YTD) as exported on the morning of Mon Nov 9

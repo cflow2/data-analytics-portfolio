@@ -13,7 +13,7 @@ import type {
 } from '@/domain/types';
 import { addDays, diffDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
-  cellText, cleanComment, hashString, normalizeApptId, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
+  cellText, cleanComment, formatPhone, hashString, normalizeApptId, isBlank, normalizeHeader, parseDateCell, parseNumber, parseScore, textKey,
 } from './normalize';
 import { ATTR_FIELDS, ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
 import { redact, knownNamesRule, type RedactionRule } from './redact';
@@ -140,6 +140,16 @@ function dateAndWeek(ctx: Ctx, raw: unknown): { date: ISODate; fw: number } | nu
 }
 
 // ───────────────────────── builders ─────────────────────────
+/** Customer name and phone from optional columns (full name, or first + last). Kept local for the SM email. */
+function contactFrom(row: unknown[], map: Record<string, number>): { customerName?: string; customerPhone?: string } {
+  const clean = (v: unknown) => cellText(v).replace(/\s+/g, ' ').trim();
+  const full = clean(get(row, map, 'customerName'));
+  const name = full || [clean(get(row, map, 'customerFirst')), clean(get(row, map, 'customerLast'))].filter(Boolean).join(' ');
+  const phone = clean(get(row, map, 'customerPhone'));
+  return { ...(name ? { customerName: name } : {}), ...(phone ? { customerPhone: formatPhone(phone) } : {}) };
+}
+
+
 function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, source: SurveySource): SurveyRecord[] {
   const out: SurveyRecord[] = [];
   const seen = new Set<string>();
@@ -186,6 +196,9 @@ function buildSurveys(ctx: Ctx, rows: unknown[][], map: Record<string, number>, 
     if (market) rec.market = market;
     const appt = cellText(get(row, map, 'appointmentId'));
     if (appt) rec.appointmentId = appt;
+    const job = cellText(get(row, map, 'jobId')).trim();
+    if (job) rec.jobId = job;
+    Object.assign(rec, contactFrom(row, map));
     if (uncertain) rec.redactionUncertain = true;
     if ('score100' in map) {
       const sc = parseNumber(get(row, map, 'score100'));
@@ -320,6 +333,7 @@ function buildAppointments(ctx: Ctx, rows: unknown[][], map: Record<string, numb
     const rec: AppointmentRecord = { id, associate, sourceFile: ctx.fileName };
     const job = cellText(get(row, map, 'jobId')).trim();
     if (job) rec.jobId = job;
+    Object.assign(rec, contactFrom(row, map));
     const store = normalizeStoreNo(get(row, map, 'storeNo'));
     if (store) rec.storeNo = store;
     const rawDate = get(row, map, 'date');

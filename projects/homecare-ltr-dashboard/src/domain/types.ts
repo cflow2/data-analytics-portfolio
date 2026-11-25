@@ -38,6 +38,11 @@ export interface SurveyRecord {
   topics?: string[];
   /** RedVest Associate, joined from the appointment file by Appointment ID (not stored on the survey) */
   associate?: string;
+  /** Job ID (Medallia “Project number”, e.g. SA…); also filled from the appointment file */
+  jobId?: string;
+  /** Customer name and phone when an export carries them. Local only; used for the store manager email. */
+  customerName?: string;
+  customerPhone?: string;
   sourceFile: string;
   redactionUncertain?: boolean;
   demo?: boolean;
@@ -93,6 +98,9 @@ export interface AppointmentRecord {
   storeNo?: string;
   date?: ISODate;
   fw?: number;
+  /** Customer name and phone when the appointment export carries them (local only, for the SM email) */
+  customerName?: string;
+  customerPhone?: string;
   sourceFile: string;
   demo?: boolean;
 }

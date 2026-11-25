@@ -24,6 +24,8 @@ const PATHS: Record<string, string> = {
   trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13',
   lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
   x: 'M6 6l12 12M18 6L6 18',
+  mail: 'M3 5h18v14H3zM3 6l9 7 9-7',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
   menu: 'M4 6h16M4 12h16M4 18h16',
   sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   moon: 'M20 15A8 8 0 1 1 9 4a7 7 0 0 0 11 11z',

@@ -42,6 +42,26 @@ export async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/** Copy formatted HTML (pastes into Outlook with bold, italics and bullets) with a plain-text fallback. */
+export async function copyHtml(html: string, text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+    return true;
+  } catch {
+    // Older browsers: select a rendered copy and use the legacy copy command, which keeps formatting.
+    const div = document.createElement('div');
+    div.contentEditable = 'true';
+    div.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    div.innerHTML = html;
+    document.body.appendChild(div);
+    const range = document.createRange(); range.selectNodeContents(div);
+    const sel = window.getSelection(); sel?.removeAllRanges(); sel?.addRange(range);
+    const ok = document.execCommand('copy');
+    sel?.removeAllRanges(); div.remove();
+    return ok || copyText(text);
+  }
+}
+
 /** Copy a PNG data URL to the clipboard; falls back to downloading it. */
 export async function copyPng(dataUrl: string, fallbackName: string): Promise<'copied' | 'downloaded'> {
   const blob = await (await fetch(dataUrl)).blob();

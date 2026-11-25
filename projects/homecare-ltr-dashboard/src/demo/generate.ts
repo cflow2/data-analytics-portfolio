@@ -230,6 +230,8 @@ function assignAttributes(rng: Rng, surveys: SurveyRecord[], targets?: Record<At
 
 // ───────────────────────────── follow-ups ─────────────────────────────
 const ASSOC_FIRST = ['Rowan', 'Quinn', 'Harper', 'Reese', 'Skyler', 'Jordan', 'Morgan', 'Taylor', 'Parker', 'Sawyer', 'Emerson', 'Hayden', 'Kendall', 'Logan', 'Peyton', 'River', 'Sage', 'Tatum'];
+const CUST_FIRST = ['Avery', 'Jordan', 'Morgan', 'Riley', 'Casey', 'Quinn', 'Taylor', 'Reese', 'Parker', 'Rowan', 'Skyler', 'Emerson'];
+const CUST_LAST = ['Sample', 'Example', 'Testwell', 'Placeholder', 'Mockford', 'Demoson', 'Fictive', 'Specimen'];
 const SM_NAMES = ['DEMO SM Avery', 'DEMO SM Blake', 'DEMO SM Casey', 'DEMO SM Devon', 'DEMO SM Emery', 'DEMO SM Finley', 'DEMO SM Gray'];
 const DOCUMENTED = [
   'Called member on {d}; apologized and scheduled a return visit to finish the service.',
@@ -351,6 +353,12 @@ export function generateDemoData(seed = 4040): DemoData {
     id: s.appointmentId!, jobId: `DEMO-J-${s.appointmentId!.slice(7)}`, associate: arng.pick(crew.get(s.storeNo) ?? ['DEMO Unassigned']),
     storeNo: s.storeNo, date: s.date, fw: s.fw, sourceFile: DEMO_SOURCE, demo: true,
   }));
+  // Fictional customers (555-01xx numbers are reserved for fiction); about 1 in 8 has no phone, as in real exports.
+  const crng = new Rng(seed + 13);
+  appointments.forEach((a, i) => {
+    a.customerName = `DEMO ${crng.pick(CUST_FIRST)} ${crng.pick(CUST_LAST)}`;
+    if (crng.chance(0.875)) a.customerPhone = `(555) 555-01${String(i % 100).padStart(2, '0')}`;
+  });
 
   const { subscriptionWeeks, subscriptionSnapshots } = demoSubscriptions(seed + 11, stores, surveys);
   return { stores, surveys, followups, tags, weeks, questions, appointments, subscriptionWeeks, subscriptionSnapshots };

@@ -115,6 +115,19 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   const voc = await main();
   check('VOC Themes shows where LTR points went and services members want added', /Where LTR points went/.test(voc) && /Services members want added/.test(voc) && /Tankless water heater/.test(voc));
 
+  // 4c. Store manager email for a detractor (composer, preview, copy)
+  await page.goto(url + '#/detractors?fw=40'); await page.waitForTimeout(800);
+  await page.locator('button:has-text("Email SM")').first().click(); await page.waitForTimeout(500);
+  const preview = await page.innerText('[data-testid="sm-email-preview"]');
+  await page.click('button:has-text("Copy for Outlook")'); await page.waitForTimeout(400);
+  const copiedMsg = await page.locator('[role="dialog"] [role="status"]').innerText();
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  const copiedMark = await page.locator('text=/^Copied [A-Z][a-z]{2} \\d/').count();
+  check('Email SM builds the store manager email (score, customer, phone, associate, Job ID, exact quote) and copies it',
+    /^Hi (\w+|\[SM first name\]),/.test(preview) && /We received a \d LTR detractor from DEMO \w+ \w+ following a HomeCare\+ appointment on \d\d\/\d\d\/\d\d with DEMO/.test(preview)
+      && /Customer Information/.test(preview) && /Job ID: DEMO-J-/.test(preview) && /Associate: DEMO/.test(preview) && /(\(555\) \d{3}-\d{4}|\[Customer phone\])/.test(preview)
+      && /Thank You,/.test(preview) && /copied/i.test(copiedMsg) && copiedMark > 0, preview.split('\n').slice(0, 3).join(' | '));
+
   // 5. Daily Pulse is built from surveys
   await page.goto(url + '#/pulse'); await page.waitForTimeout(600);
   const pulse = (await main()) + (await page.inputValue('textarea[aria-label="Pulse script"]'));

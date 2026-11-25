@@ -22,6 +22,7 @@ function mergeInto(target: SurveyRecord, from: SurveyRecord): boolean {
   }
   if (!target.comment && from.comment) { target.comment = from.comment; target.redactionUncertain = from.redactionUncertain; changed = true; }
   if (!target.appointmentId && from.appointmentId) { target.appointmentId = from.appointmentId; changed = true; }
+  for (const k of ['jobId', 'customerName', 'customerPhone'] as const) if (!target[k] && from[k]) { target[k] = from[k]; changed = true; }
   if (!target.division && from.division) { target.division = from.division; changed = true; }
   if (!target.topics?.length && from.topics?.length) { target.topics = from.topics; changed = true; }
   return changed;

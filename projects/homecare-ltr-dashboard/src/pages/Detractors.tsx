@@ -20,6 +20,9 @@ import { Button, Card, PageHeader, Select, cx } from '@/components/ui/primitives
 import { RedactedText } from '@/components/data/RedactedText';
 import { insightReason } from '@/ingest/followup';
 import { assertUnlocked } from '@/tagging/manual';
+import { SmEmailDrawer } from '@/components/detractors/SmEmailDrawer';
+import { useEmailEdits, useEmailTemplate } from '@/state/emailTemplate';
+import { Icon } from '@/components/ui/Icon';
 
 const UNTAGGED = 'untagged';
 const label = (theme: string) => (theme === UNTAGGED ? 'Untagged' : themeName(theme));
@@ -48,6 +51,9 @@ export function Detractors() {
   const [fu, setFu] = useState<'all' | FollowUpStatus>('all');
   const [theme, setTheme] = useState<string>('all');
   const [copied, setCopied] = useState(false);
+  const [emailFor, setEmailFor] = useState<string | null>(null);
+  const emailEdits = useEmailEdits();
+  const template = useEmailTemplate();
 
   const v = useMemo(() => {
     if (!data) return null;
@@ -99,7 +105,25 @@ export function Detractors() {
       cell: (r) => (r.followUpId && r.smInsight ? <RedactedText recordId={r.followUpId} field="insights" text={r.smInsight} className="text-xs" /> : <span className="text-xs text-muted">—</span>) },
     { id: 'days', header: 'Days', value: (r) => r.daysSince, align: 'right', width: 56,
       cell: (r) => <span className={cx(r.overdue && 'font-medium text-surveys')}>{r.daysSince}{r.overdue && <span className="sr-only"> overdue</span>}</span> },
+    ...(presentation ? [] : [{
+      id: 'email', header: 'SM email', width: 112, sortable: false,
+      value: (r: DetractorRow) => (emailEdits.get(r.id)?.copiedAt ? `Copied ${emailEdits.get(r.id)!.copiedAt!.slice(0, 10)}` : ''),
+      cell: (r: DetractorRow) => {
+        const at = emailEdits.get(r.id)?.copiedAt;
+        return (
+          <div>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setEmailFor(r.id); }} aria-label={`Email SM about survey ${r.id}`}
+              className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-xs font-medium hover:bg-surface-2">
+              <Icon name="mail" size={14} />Email SM
+            </button>
+            {at && <div className="mt-0.5 text-[10px] text-grow">Copied {monthDay(at.slice(0, 10))}</div>}
+          </div>
+        );
+      },
+    } as Col<DetractorRow>]),
   ];
+  const emailSurvey = emailFor ? data.ds.surveys.find((x) => x.id === emailFor) : undefined;
+  const emailRow = emailFor ? v.rows.find((x) => x.id === emailFor) ?? v.nextRows.find((x) => x.id === emailFor) : undefined;
 
   const mixOption: EChartsOption = base({
     grid: { left: 190, right: 60, top: 8, bottom: 8 },
@@ -177,6 +201,9 @@ export function Detractors() {
           </Card>
         </div>
       </PageGate>
+      {emailSurvey && !presentation && (
+        <SmEmailDrawer survey={emailSurvey} ds={data.ds} rootCause={emailRow?.rootCause ?? null} edits={emailEdits.get(emailSurvey.id) ?? {}} template={template} onClose={() => setEmailFor(null)} />
+      )}
     </>
   );
 }

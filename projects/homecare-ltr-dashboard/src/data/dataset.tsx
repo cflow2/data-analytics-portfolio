@@ -4,7 +4,7 @@ import { useLive } from '@/hooks/useLive';
 import { DEFAULT_TAXONOMY, type ThemeDef } from '@/domain/taxonomy';
 import { normalizeApptId } from '@/ingest/normalize';
 import type {
-  AttributeWeekly, FollowUpRecord, ImportedFile, LeadershipQuestion, StoreRecord, SubscriptionSnapshot, SubscriptionWeek, SurveyRecord, ThemeTag, WeekMeta,
+  AppointmentRecord, AttributeWeekly, FollowUpRecord, ImportedFile, LeadershipQuestion, StoreRecord, SubscriptionSnapshot, SubscriptionWeek, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
 export interface Dataset {
@@ -15,6 +15,8 @@ export interface Dataset {
   subscriptionSnapshots: SubscriptionSnapshot[];
   /** every associate in the appointment file, sorted */
   associates: string[];
+  /** appointment file rows by normalized Appointment ID */
+  appointments: Map<string, AppointmentRecord>;
   followups: FollowUpRecord[];
   stores: Map<string, StoreRecord>;
   tags: Map<string, ThemeTag>;
@@ -39,9 +41,17 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
     ]);
     const taxonomy = (tax?.value as ThemeDef[] | undefined) ?? DEFAULT_TAXONOMY;
     // RedVest Associate joined by Appointment ID (the appointment file can be loaded before or after the Tracker).
-    const assoc = new Map(appointments.map((a) => [a.id, a.associate]));
-    if (assoc.size) for (const s of surveys) { const a = s.appointmentId ? assoc.get(normalizeApptId(s.appointmentId)) : undefined; if (a) s.associate = a; }
-    return { surveys, subscriptionWeeks, subscriptionSnapshots, associates: [...new Set(appointments.map((a) => a.associate))].sort(), followups, stores, tagList, attributeWeekly, weeks, files, taxonomy, questions };
+    // Job ID and customer contact fill in from the appointment file when the survey doesn't carry them.
+    const byId = new Map(appointments.map((a) => [a.id, a]));
+    if (byId.size) for (const s of surveys) {
+      const a = s.appointmentId ? byId.get(normalizeApptId(s.appointmentId)) : undefined;
+      if (!a) continue;
+      s.associate = a.associate;
+      s.jobId ||= a.jobId;
+      s.customerName ||= a.customerName;
+      s.customerPhone ||= a.customerPhone;
+    }
+    return { surveys, appointments: byId, subscriptionWeeks, subscriptionSnapshots, associates: [...new Set(appointments.map((a) => a.associate))].sort(), followups, stores, tagList, attributeWeekly, weeks, files, taxonomy, questions };
   }, []);
   const data = useMemo<Dataset | undefined>(() => q.data && {
     ...q.data,
