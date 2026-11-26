@@ -40,6 +40,7 @@ The Pulse answers five questions:
 | Subscription pace | Compare the projected week total with last week's total. If the export from 7 days earlier is loaded, project with last week's own shape; otherwise use a straight line. Report how many more are needed to beat last week and the average needed **per remaining day** in the fiscal week. |
 | Missing data | **Never invent** numbers, comments, associate names, root causes or trends. If something isn't loaded, say so in one short sentence (for example, "the schedule isn't loaded"). |
 | Confirmed vs possible | Present counted facts plainly. Label anything inferred, such as a theme rising faster than usual, as a **potential concern**. |
+| Stores | Always give the **store number and name**: "store 2646 (Greenville, TX)". Take names from every file: the Tracker's Store column, the Medallia store name, the store map, and the subscription export's store names. |
 | Privacy | Quote customer comments only from the redacted text, never the original. Never name customers. Store numbers are fine. RedVest Associate names may be used for recognition. |
 | Formatting | **Bold** key metrics, significant changes and important insights. Use short paragraphs and four bullets under "Things to watch today". |
 
@@ -58,7 +59,7 @@ The Pulse answers five questions:
 5. **Promoter highlights:** one or two specific, short comments from yesterday's 9s and 10s, with the store number and the RedVest Associate when known. Skip vague comments.
 6. **Recognition:** RedVest Associates with two or more promoters and no detractors this week.
 7. **Detractor insights:**
-   - yesterday's root causes, from tagged comments only, and the lowest scores with store numbers
+   - each detractor, lowest first (up to three): the score, **store number and name**, the root cause (with sub-tag) when tagged, and a short summary of what the member said, taken from the redacted comment. Say "no comment" when there is none. Point to the Detractors screen for the rest.
    - the recurring theme this week ("behind [n] of the week's [d] detractors")
    - any theme running at double its usual rate, as a potential concern
 

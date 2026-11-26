@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { fiscalMonth, fiscalQuarter, fiscalWeek, fiscalWeekInYear, weekEnd, weekStart } from '@/lib/fiscal';
 import { expectedScore100 } from '@/lib/ltr';
-import { normalizeRegion, normalizeStoreNo } from '@/domain/geo';
+import { normalizeRegion, normalizeStoreNo, parseStoreName } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
   AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, SubscriptionSnapshot, SubscriptionWeek, OriginalText, StoreRecord, SurveyRecord, SurveySource,
@@ -121,13 +121,7 @@ const rowIsBlank = (row: unknown[] | undefined) => !row || row.every(isBlank);
 const noContent = (row: unknown[], map: Record<string, number>, keys: string[]) => keys.every((k) => !(k in map) || isBlank(row[map[k]]));
 
 /** "2968 - LOWE'S OF CARROLLTON, GA" → Carrollton, GA */
-export function parseStoreName(raw: string): { name: string; city: string; state: string } {
-  const name = raw.replace(/^\s*\d+\s*-\s*/, '').trim();
-  const rest = name.replace(/^LOWE['’]?S\s+(OF\s+)?/i, '').trim();
-  const m = /^(.*?),\s*([A-Za-z]{2})\.?\s*$/.exec(rest);
-  const title = (x: string) => x.toLowerCase().replace(/(^|[\s.\-/])([a-z])/g, (_, a, b) => a + b.toUpperCase()).trim();
-  return m ? { name, city: title(m[1]), state: m[2].toUpperCase() } : { name, city: title(rest.replace(/,$/, '')), state: '' };
-}
+export { parseStoreName };
 const get = (row: unknown[], map: Record<string, number>, key: string): unknown => (key in map ? row[map[key]] : undefined);
 
 /** Shared date → fiscal-week step; returns null (and records why) when the row must be dropped. */

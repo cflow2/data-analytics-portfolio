@@ -7,7 +7,7 @@
 import type { Dataset } from '@/data/dataset';
 import { addDays, diffDays, weekday, type ISODate } from '@/lib/dates';
 import { fiscalWeek, weekStart } from '@/lib/fiscal';
-import { storeLabel } from '@/domain/geo';
+import { storeCity, storeLabel } from '@/domain/geo';
 import { ltrSummary, type LtrSummary } from '@/lib/ltr';
 import type { SurveyRecord } from '@/domain/types';
 import { ltrSurveys } from '@/analytics/ltr';
@@ -43,8 +43,10 @@ export interface PulseFacts {
   prevDay: { date: ISODate; s: LtrSummary };
   comments: number;
   topThemes: { key: string; count: number }[];
-  /** 0–8 scores in the period, lowest first */
-  detractors: { s: SurveyRecord; store: string; cause: string | null }[];
+  /** 0–8 scores in the period, lowest first: root cause (with sub-tag) and a short summary of the redacted comment */
+  detractors: { s: SurveyRecord; store: string; cause: string | null; summary: string | null }[];
+  /** store number → “City, ST” from every loaded file */
+  storeNames: Map<string, string>;
   /** comments tagged damage/safety in the period */
   damage: { s: SurveyRecord; store: string }[];
   /** the fiscal week the period ends in, to date, and the same days of the week before */
@@ -111,6 +113,16 @@ export function shortQuote(text: string, maxWords = 25): string {
   }
   if (!out) out = t.split(' ').slice(0, maxWords).join(' ') + '…';
   return out;
+}
+
+/**
+ * What a detractor said, in a few words: the first sentence of the redacted comment (≤ 14 words), with redaction
+ * tokens like [name] removed so it reads aloud cleanly. Null when there's no comment.
+ */
+export function detractorSummary(comment: string): string | null {
+  const t = comment.replace(/\[(name|phone|email|address|order#)\]/gi, '').replace(/\s+([,.;:!?])/g, '$1').replace(/\s{2,}/g, ' ').trim();
+  if (!t || /^(n\/?a|none|no comments?)\.?$/i.test(t)) return null;
+  return shortQuote(t, 14).replace(/[,;:]$/, '');
 }
 
 /** Four completed weeks: a least-squares change of 1 point or more across them counts as a trend. */
@@ -216,7 +228,12 @@ export function pulseFacts(ds: Dataset, date: ISODate, benchmark = 93, fyStart?:
     date, meeting: { fw: fiscalWeek(date, fyStart), day: diffDays(date, weekStart(fiscalWeek(date, fyStart), fyStart)) + 1 }, isFriday: weekday(date) === 5,
     from: p.from, to: p.to, periodLabel: p.label, surveys, period: sum(surveys), prevDay,
     comments: surveys.filter((s) => s.comment.trim()).length, topThemes,
-    detractors: dets.map((s) => ({ s, store: storeLabel(s.storeNo, ds.stores), cause: cause(s) ? tname(cause(s)!) : null })),
+    detractors: dets.map((s) => {
+      const t = tagOf(s);
+      const c = cause(s);
+      return { s, store: storeLabel(s.storeNo, ds.stores), cause: c ? `${tname(c)}${t?.subTag ? ` (${t.subTag})` : ''}` : null, summary: detractorSummary(s.comment) };
+    }),
+    storeNames: new Map([...ds.stores.values()].map((st) => [st.storeNo, storeCity(st.storeNo, ds.stores)] as const).filter(([, v]) => !!v)),
     damage, wtd, fytd, last4, trend: trendOf(last4), promoterHighlights, associateStars, associatesLoaded: (ds.appointments?.size ?? 0) > 0,
     periodCauses, periodUntagged: dets.length - periodCauses.reduce((a, t) => a + t.count, 0), wtdCauses, emerging, missed, overdue, appointmentsToday,
     regionsBelow, benchmark, watch, subs, hasData: surveys.length > 0 || !!subs,
@@ -258,8 +275,13 @@ export function pulseDoc(f: PulseFacts): PulseDoc {
     return `${d > 0 ? 'up' : 'down'} ${Math.abs(d).toFixed(1)} points`;
   };
   const vsBench = (v: number) => (v >= f.benchmark ? `above the ${f.benchmark} benchmark` : `below the ${f.benchmark} benchmark`);
-  const store = (no: string) => `store ${n(Number(no), String(Number(no)))}`;
-  const storeLeader = (t: { storeNo: string; label: string; instore: number }) => `${t.label.replace(/^\d+ /, (m) => `${n(Number(m), m.trim())} `)} (**${n(t.instore)}**)`;
+  /** “store 2646 (Greenville, TX)”: store number and name, from every loaded file */
+  const store = (no: string) => { const name = f.storeNames.get(no); return `store ${/^\d+$/.test(no) ? n(Number(no), no) : no}${name ? ` (${name})` : ''}`; };
+  const storeLeader = (t: { storeNo: string; label: string; instore: number }) => {
+    const name = f.storeNames.get(t.storeNo) ?? t.label.replace(/^\d+\s*/, '');
+    return `store ${n(Number(t.storeNo), t.storeNo)}${name ? ` (${name})` : ''} with **${n(t.instore)}**`;
+  };
+  const quoteNums = (q: string) => q.replace(/\d+(?:\.\d+)?/g, (m) => n(Number(m), m));
   const an = (k: number) => (k === 8 || k === 11 || k === 18 ? 'an' : 'a');
   const weekend = f.periodLabel.startsWith('the weekend');
   const when = weekend ? 'Over the weekend' : 'Yesterday';
@@ -267,7 +289,8 @@ export function pulseDoc(f: PulseFacts): PulseDoc {
   const prevName = DAY_LONG[weekday(f.prevDay.date)];
   const sections: Section[] = [];
   const sec = (title: string | null) => { const s: Section = { title, lines: [] }; sections.push(s); return s; };
-  const add = (s: Section, pri: Priority, text: string | null | false, bullet = false) => { if (text) s.lines.push({ text, pri, bullet }); };
+  // A sentence that ends on a quote already has its punctuation: “…done.”. → “…done.”
+  const add = (s: Section, pri: Priority, text: string | null | false, bullet = false) => { if (text) s.lines.push({ text: text.replace(/([.!?…])”\.$/, '$1”'), pri, bullet }); };
 
   if (!f.hasData) {
     return finish([{ title: null, lines: [{ text: `Good morning! There are no surveys or subscriptions loaded for ${f.periodLabel}, so there’s no Pulse to read yet.`, pri: 1 }] }], numbers);
@@ -311,9 +334,12 @@ export function pulseDoc(f: PulseFacts): PulseDoc {
   }
   // Detractor insights: confirmed root causes, recurring and emerging themes.
   if (f.detractors.length) {
-    const causes = f.periodCauses.map((c) => `${c.name.toLowerCase()} (${n(c.count)})`);
-    const lowest = f.detractors.slice(0, 2).map((d) => `${an(d.s.ltr!)} **${n(d.s.ltr!)}** at ${store(d.s.storeNo)}`).join(' and ');
-    add(cx, 2, `Detractors ${whenLower}: ${causes.length ? `root causes were ${causes.join(', ')}` : 'no root cause was tagged'}${f.periodUntagged && causes.length ? `, with ${n(f.periodUntagged)} not yet tagged` : ''}. The lowest ${f.detractors.length === 1 ? 'was' : 'were'} ${lowest}.`);
+    // Each detractor, lowest first: score, store number and name, root cause, and a short summary of what the member said.
+    const describe = (d: PulseFacts['detractors'][number]) => `${an(d.s.ltr!)} **${n(d.s.ltr!)}** at ${store(d.s.storeNo)}`
+      + (d.cause ? `, **${d.cause.toLowerCase()}**` : '')
+      + (d.summary ? `: “${quoteNums(d.summary)}”` : d.cause ? '' : ', with no comment');
+    const shown = f.detractors.slice(0, 3);
+    add(cx, 1, `Detractors ${whenLower}: ${shown.map(describe).join('; ')}${f.detractors.length > shown.length ? `; plus ${n(f.detractors.length - shown.length)} more on the Detractors screen` : ''}.`);
   }
   const recurring = f.wtdCauses[0];
   if (recurring && recurring.count >= 2 && !f.isFriday) add(cx, 2, `The recurring theme this week is **${recurring.name.toLowerCase()}**, behind ${n(recurring.count)} of the week’s ${n(W.s.detractors)} detractors.`);
@@ -387,7 +413,7 @@ export function pulseDoc(f: PulseFacts): PulseDoc {
       : `**Today’s appointments:** ${plural(f.appointmentsToday.n, 'appointment')} scheduled${f.appointmentsToday.byRegion.length ? `, most in ${f.appointmentsToday.byRegion.map((r) => `${r.key} (${n(r.count)})`).join(' and ')}` : ''}.`, true);
   const ops: string[] = [];
   if (f.damage.length) ops.push(`${plural(f.damage.length, 'comment')} ${whenLower} mention${f.damage.length === 1 ? 's' : ''} damage or safety; confirm Field Support has ${f.damage.length === 1 ? 'it' : 'them'}`);
-  if (f.overdue.count) ops.push(`**${plural(f.overdue.count, 'detractor')}** still ${f.overdue.count === 1 ? 'has' : 'have'} no documented store follow-up after 48 hours${f.overdue.oldest ? ` (oldest: ${store(f.overdue.oldest.storeNo)}, ${plural(f.overdue.oldest.days, 'day')})` : ''}`);
+  if (f.overdue.count) ops.push(`**${plural(f.overdue.count, 'detractor')}** still ${f.overdue.count === 1 ? 'has' : 'have'} no documented store follow-up after 48 hours${f.overdue.oldest ? `; the oldest is ${store(f.overdue.oldest.storeNo)} at ${plural(f.overdue.oldest.days, 'day')}` : ''}`);
   if (f.missed) ops.push(`${plural(f.missed, 'member')} said nobody showed up this week`);
   add(w, ops.length ? 1 : 3, `**Operational:** ${ops.length ? ops.join('; ') : 'no damage reports, missed appointments or overdue follow-ups in the loaded data'}.`, true);
 

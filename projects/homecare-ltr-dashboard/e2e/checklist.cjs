@@ -117,7 +117,10 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
 
   // 4c. Store manager email for a detractor (composer, preview, copy)
   await page.goto(url + '#/detractors?fw=40'); await page.waitForTimeout(800);
-  await page.locator('button:has-text("Email SM")').first().click(); await page.waitForTimeout(500);
+  const tableBtn = page.locator('table button:has-text("Email SM")').first();
+  const box = await tableBtn.boundingBox();
+  check('Email SM is the first column of the detractor table, on screen without scrolling sideways', !!box && box.x + box.width <= 1440, box ? `x=${Math.round(box.x)}` : 'not found');
+  await tableBtn.click(); await page.waitForTimeout(500);
   const preview = await page.innerText('[data-testid="sm-email-preview"]');
   await page.click('button:has-text("Copy for Outlook")'); await page.waitForTimeout(400);
   const copiedMsg = await page.locator('[role="dialog"] [role="status"]').innerText();

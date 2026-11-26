@@ -121,7 +121,7 @@ Every survey that scores 0–8 costs 100 ÷ n points of LTR (0.5 pts when n = 20
 
 ## Email the store manager (Detractors)
 
-Every detractor row has **Email SM**. It opens a composer with the email laid out like the standard store manager note:
+Every detractor row has **Email SM**, the first column of the table. It's also on each line of the Closed-loop tracker and the Next week preview. It opens a composer with the email laid out like the standard store manager note:
 
 - the greeting with the SM's first name
 - the bold score, customer and associate, with the appointment date
@@ -188,7 +188,8 @@ Each comparison says whether the gap is bigger than 2 standard errors ("bigger t
       - fiscal year to date and the four-week trend
       - a promoter quote, from the redacted text
       - RedVest Associate recognition
-      - detractor root causes, and recurring or emerging themes
+      - each detractor (lowest first, up to three): score, store number and name, root cause, and a short summary of the redacted comment
+      - recurring and emerging themes
     - **Subscriptions:**
       - net new yesterday, plus the week and fiscal-year totals
       - pace vs last week, and what's needed per remaining day
@@ -206,6 +207,7 @@ Each comparison says whether the gap is bigger than 2 standard errors ("bigger t
     - subscriptions vs last week and what's needed today
   - Lines are ranked, and the lowest-priority ones are dropped until the script fits two minutes; the page says how many were dropped.
   - Anything not loaded is said plainly, never guessed.
+  - Stores always appear as number and name, e.g. “store 2646 (Greenville, TX)”. Names come from every loaded file: the Tracker's Store column, the Medallia store name and the store map first, then the subscription export's store names for any store those don't name. A survey with no store number takes it from its appointment or follow-up row.
   - Key numbers are **bold**. **Copy for Teams/Outlook** keeps the bold and bullets; **Copy text** is plain.
   - **Edit** lets you change the script (use `**double asterisks**` for bold). Edits are saved per date, and every number you type is checked against the data.
 - **Leadership questions log** lives on **LTR Slide**: questions logged at a WBR open the next week's talk track (“Last week I was asked about…”), each answered from that week's data, until marked answered. Answers pinned from **Ask** go to the slide's Back pocket.

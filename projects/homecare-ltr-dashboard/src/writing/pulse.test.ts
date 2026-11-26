@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { demoDataset } from '@/test/demoDataset';
 import { countsForLtr } from '@/domain/survey';
-import { PULSE_MAX_WORDS, plainText, pulseDoc, pulseFacts, pulseHtml, pulsePeriod, pulseScript, shortQuote, trendOf, wordCount } from './pulse';
+import { PULSE_MAX_WORDS, detractorSummary, plainText, pulseDoc, pulseFacts, pulseHtml, pulsePeriod, pulseScript, shortQuote, trendOf, wordCount } from './pulse';
 import { verifyNumbers } from './verify';
 import { ltrSummary } from '@/lib/ltr';
 
@@ -36,6 +36,28 @@ describe('daily pulse', () => {
     // privacy: no customer names, phone numbers or redaction tokens; store numbers without thousands separators
     expect(t).not.toMatch(/\[name\]|Jane|@|555|Sample|store \d,\d{3}/);
     expect(t).not.toMatch(/\ba 8\b|\ba 11\b/);
+  });
+
+  it('describes each detractor with store number and name, root cause and a short summary', () => {
+    const f = pulseFacts(ds, '2026-11-04');
+    const t = pulseScript(f);
+    const line = t.split('\n').find((l) => l.startsWith('Detractors yesterday:'))!;
+    expect(line).toBeTruthy();
+    for (const d of f.detractors.slice(0, 3)) {
+      const st = ds.stores.get(d.s.storeNo)!;
+      expect(line).toContain(`at store ${d.s.storeNo} (${st.city}, ${st.state})`);
+      if (d.cause) expect(line).toContain(`**${d.cause.toLowerCase()}**`);
+      if (d.summary) expect(line).toContain(`“${d.summary}”`);
+    }
+    // every store mentioned anywhere carries its name
+    for (const m of t.matchAll(/store (\d{4})(?! \()/g)) throw new Error(`store ${m[1]} without a name`);
+  });
+
+  it('detractor summaries read cleanly', () => {
+    expect(detractorSummary('Nobody came. [name] said they would call me back and never did, so I cancelled the whole plan today.')).toBe('Nobody came.');
+    expect(detractorSummary('Tech said the [name] tankless heater is not covered')).toBe('Tech said the tankless heater is not covered');
+    expect(detractorSummary('  ')).toBeNull();
+    expect(detractorSummary('N/A')).toBeNull();
   });
 
   it('stays within two minutes on every day of a month', () => {

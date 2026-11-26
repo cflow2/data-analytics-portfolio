@@ -23,7 +23,48 @@ export function normalizeStoreNo(raw: unknown): string {
 /** "#### – City, ST" */
 export function storeLabel(storeNo: string, stores?: Map<string, StoreRecord>): string {
   const s = stores?.get(storeNo);
-  return s && s.city ? `${storeNo} – ${s.city}, ${s.state}` : storeNo;
+  return s && s.city ? `${storeNo} – ${s.city}${s.state ? `, ${s.state}` : ''}` : storeNo;
+}
+
+/** "City, ST" for a store, or '' when no file names it. */
+export function storeCity(storeNo: string, stores?: Map<string, StoreRecord>): string {
+  const s = stores?.get(storeNo);
+  return s?.city ? `${s.city}${s.state ? `, ${s.state}` : ''}` : '';
+}
+
+/** "2702 - LOWE'S OF HAINES CITY, FL" / "LOWE'S OF HAINES CITY, FL" → name, city "Haines City", state "FL". */
+export function parseStoreName(raw: string): { name: string; city: string; state: string } {
+  const name = raw.replace(/^\s*\d+\s*-\s*/, '').trim();
+  const rest = name.replace(/^LOWE['’]?S\s+(OF\s+)?/i, '').trim();
+  const m = /^(.*?),\s*([A-Za-z]{2})\.?\s*$/.exec(rest);
+  const title = (x: string) => x.toLowerCase().replace(/(^|[\s.\-/])([a-z])/g, (_, a, b) => a + b.toUpperCase()).trim();
+  return m ? { name, city: title(m[1]), state: m[2].toUpperCase() } : { name, city: title(rest.replace(/,$/, '')), state: '' };
+}
+
+/**
+ * One store directory from every loaded file. The stores table (Tracker “Store” column, Medallia store name, store map)
+ * comes first; stores it doesn't name are filled from the subscription export’s store names (“LOWE'S OF …, ST”).
+ * Stores only seen as a number (follow-up file, appointment file) are added so lookups work, with region when known.
+ */
+export function buildStoreDirectory(
+  stores: StoreRecord[],
+  named: { storeNo: string; storeName?: string; region?: string }[],
+  seen: { storeNo?: string; region?: string }[],
+): Map<string, StoreRecord> {
+  const m = new Map(stores.map((s) => [s.storeNo, { ...s }]));
+  for (const x of named) {
+    if (!x.storeNo || !x.storeName) continue;
+    const cur = m.get(x.storeNo);
+    if (cur?.city) continue;
+    const p = parseStoreName(x.storeName);
+    if (!p.city) continue;
+    m.set(x.storeNo, { storeNo: x.storeNo, district: cur?.district ?? null, region: cur?.region || x.region || '', ...p });
+  }
+  for (const x of seen) {
+    if (!x.storeNo || m.has(x.storeNo)) continue;
+    m.set(x.storeNo, { storeNo: x.storeNo, name: '', city: '', state: '', district: null, region: x.region ?? '' });
+  }
+  return m;
 }
 
 export function districtOf(storeNo: string, stores: Map<string, StoreRecord>): string {

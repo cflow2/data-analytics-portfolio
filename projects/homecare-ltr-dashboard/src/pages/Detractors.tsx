@@ -76,6 +76,20 @@ export function Detractors() {
   const top = v.mix[0];
   const mixText = top ? `${top.count} of ${v.rows.length} ${label(top.theme).toLowerCase()}` : '—';
 
+  /** “Email SM” opens the store manager email for this survey; shows when it was last copied. */
+  const emailButton = (id: string) => {
+    const at = emailEdits.get(id)?.copiedAt;
+    return (
+      <span className="inline-flex flex-col items-start">
+        <button type="button" onClick={(e) => { e.stopPropagation(); setEmailFor(id); }} aria-label={`Email SM about survey ${id}`}
+          className="inline-flex h-7 items-center gap-1 whitespace-nowrap rounded-lg border border-calls bg-calls px-2 text-xs font-medium text-white hover:opacity-90 dark:text-[#0d1524]">
+          <Icon name="mail" size={14} />Email SM
+        </button>
+        {at && <span className="mt-0.5 text-[10px] text-grow">Copied {monthDay(at.slice(0, 10))}</span>}
+      </span>
+    );
+  };
+
   const cols: Col<DetractorRow>[] = [
     { id: 'date', header: 'Date', value: (r) => r.date, cell: (r) => <span className="whitespace-nowrap">{monthDay(r.date)}</span>, width: 72 },
     { id: 'fw', header: 'FW', value: (r) => r.fw, width: 50 },
@@ -105,23 +119,13 @@ export function Detractors() {
       cell: (r) => (r.followUpId && r.smInsight ? <RedactedText recordId={r.followUpId} field="insights" text={r.smInsight} className="text-xs" /> : <span className="text-xs text-muted">—</span>) },
     { id: 'days', header: 'Days', value: (r) => r.daysSince, align: 'right', width: 56,
       cell: (r) => <span className={cx(r.overdue && 'font-medium text-surveys')}>{r.daysSince}{r.overdue && <span className="sr-only"> overdue</span>}</span> },
-    ...(presentation ? [] : [{
-      id: 'email', header: 'SM email', width: 112, sortable: false,
-      value: (r: DetractorRow) => (emailEdits.get(r.id)?.copiedAt ? `Copied ${emailEdits.get(r.id)!.copiedAt!.slice(0, 10)}` : ''),
-      cell: (r: DetractorRow) => {
-        const at = emailEdits.get(r.id)?.copiedAt;
-        return (
-          <div>
-            <button type="button" onClick={(e) => { e.stopPropagation(); setEmailFor(r.id); }} aria-label={`Email SM about survey ${r.id}`}
-              className="inline-flex h-7 items-center gap-1 rounded-lg border border-border bg-surface px-2 text-xs font-medium hover:bg-surface-2">
-              <Icon name="mail" size={14} />Email SM
-            </button>
-            {at && <div className="mt-0.5 text-[10px] text-grow">Copied {monthDay(at.slice(0, 10))}</div>}
-          </div>
-        );
-      },
-    } as Col<DetractorRow>]),
   ];
+  // The SM email action comes first so it is always on screen without scrolling the table sideways.
+  if (!presentation) cols.unshift({
+    id: 'email', header: 'SM email', width: 116, sortable: false,
+    value: (r: DetractorRow) => (emailEdits.get(r.id)?.copiedAt ? `Copied ${emailEdits.get(r.id)!.copiedAt!.slice(0, 10)}` : ''),
+    cell: (r: DetractorRow) => emailButton(r.id),
+  });
   const emailSurvey = emailFor ? data.ds.surveys.find((x) => x.id === emailFor) : undefined;
   const emailRow = emailFor ? v.rows.find((x) => x.id === emailFor) ?? v.nextRows.find((x) => x.id === emailFor) : undefined;
 
@@ -157,7 +161,12 @@ export function Detractors() {
                 <>
                   <p className="mt-2 text-sm"><strong>{v.nextRows.length}</strong> detractor{v.nextRows.length === 1 ? '' : 's'} so far of n={v.nextN}</p>
                   <ul className="mt-1 space-y-1 text-sm">
-                    {v.nextRows.map((r) => <li key={r.id} className="tnum">{monthDay(r.date)} · {lbl(r.storeNo)} · score <strong>{r.score}</strong>{r.rootCause && <span className="text-muted"> · {label(r.rootCause)}</span>}</li>)}
+                    {v.nextRows.map((r) => (
+                      <li key={r.id} className="flex flex-wrap items-center gap-x-2 tnum">
+                        <span>{monthDay(r.date)} · {lbl(r.storeNo)} · score <strong>{r.score}</strong>{r.rootCause && <span className="text-muted"> · {label(r.rootCause)}</span>}</span>
+                        {!presentation && emailButton(r.id)}
+                      </li>
+                    ))}
                   </ul>
                 </>
               )}
@@ -165,6 +174,7 @@ export function Detractors() {
           </div>
 
           <Card title={`Detractors · FW${data.week.fw}`}>
+            {!presentation && v.rows.length > 0 && <p className="mb-2 text-xs text-muted"><strong className="text-ink">Email SM</strong> on any row drafts the store manager email (customer, phone, associate, Job ID, exact comment, score) to copy into Outlook.</p>}
             <DataTable
               rows={filtered} columns={cols} getRowId={(r) => r.id} initialSort={[{ id: 'score', desc: false }]}
               exportName={`Detractors_FW${data.week.fw}`} maxHeight={680} empty="No detractors match these filters."
@@ -187,7 +197,8 @@ export function Detractors() {
                 <p className="mb-2 text-sm"><strong className="text-surveys">{v.rows.filter((r) => r.overdue).length}</strong> detractor(s) have no documented SM contact 48+ hours after the survey.</p>
                 <ul className="space-y-1 text-sm tnum">
                   {v.rows.filter((r) => r.overdue).map((r) => (
-                    <li key={r.id} className="flex flex-wrap gap-x-3">
+                    <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {!presentation && emailButton(r.id)}
                       <span className="font-medium">{lbl(r.storeNo)}</span><span className="text-muted">{r.region} › {r.district}</span>
                       <span>Survey {r.id} · {monthDay(r.date)} · score {r.score}</span>
                       <span className={cx('rounded-full px-2 text-[11px] font-medium', STATUS_CLS[r.followUp])}>{r.followUp}</span>
