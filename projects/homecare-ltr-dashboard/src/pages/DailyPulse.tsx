@@ -3,10 +3,10 @@ import { db } from '@/db/db';
 import { useDataset } from '@/data/dataset';
 import { useLive } from '@/hooks/useLive';
 import { SCREENS } from '@/screens';
-import { pulseFacts, pulseScript } from '@/writing/pulse';
+import { PULSE_MAX_WORDS, WORDS_PER_MINUTE, plainText, pulseDoc, pulseFacts, pulseHtml, wordCount } from '@/writing/pulse';
 import { verifyNumbers } from '@/writing/verify';
 import { addDays, dayName, monthDay, todayISO, type ISODate } from '@/lib/dates';
-import { copyText } from '@/data/export';
+import { copyHtml, copyText } from '@/data/export';
 import { useSettings } from '@/state/settings';
 import { useFilters } from '@/state/filters';
 import type { PulseFacts } from '@/writing/pulse';
@@ -14,7 +14,7 @@ import { PaceLine } from '@/components/subs/PaceLine';
 import { Link } from 'react-router';
 import { useUi } from '@/state/ui';
 import { PageGate } from '@/components/ui/PageGate';
-import { Button, Card, PageHeader, cx } from '@/components/ui/primitives';
+import { Button, Card, PageHeader, Segmented, cx } from '@/components/ui/primitives';
 import { RedactedText } from '@/components/data/RedactedText';
 
 const KEY = (d: string) => `pulse:${d}`;
@@ -35,18 +35,22 @@ export function DailyPulse() {
   const d = date ?? defaultDate;
   const saved = useLive(async () => ((await db.kv.get(KEY(d)))?.value as string | undefined) ?? null, [d]);
   const [big, setBig] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [mode, setMode] = useState<'read' | 'edit'>('read');
   useEffect(() => { if (!big) return; const k = (e: KeyboardEvent) => e.key === 'Escape' && setBig(false); window.addEventListener('keydown', k); return () => window.removeEventListener('keydown', k); }, [big]);
 
   const [filters] = useFilters();
   const geo = useMemo(() => ({ division: filters.division, region: filters.region, district: filters.district, store: filters.store }), [filters.division, filters.region, filters.district, filters.store]);
   const f = useMemo(() => (ds ? pulseFacts(ds, d, benchmark, fyStart, geo) : null), [ds, d, benchmark, fyStart, geo]);
   if (!ds || !f) return <><PageHeader title={sc.title} subtitle={sc.subtitle} /><PageGate screen={sc} loading={loading} error={error} empty={false}>{null}</PageGate></>;
-  const generated = pulseScript(f);
-  const script = saved.data ?? generated;
-  const bad = verifyNumbers(script, f.numbers, [0, 6, 7, 8, 9, 10]).filter((h) => !h.ok);
+  const doc = pulseDoc(f);
+  const script = saved.data ?? doc.text;
+  const bad = verifyNumbers(plainText(script), doc.numbers, [0, 6, 7, 8, 9, 10]).filter((h) => !h.ok);
   const w = f.wtd;
-  const words = script.split(/\s+/).filter(Boolean).length;
+  const words = wordCount(script);
+  const secs = Math.round((words / WORDS_PER_MINUTE) * 60);
+  const html = pulseHtml(script);
+  const flash = (m: string) => { setCopied(m); setTimeout(() => setCopied(null), 1500); };
 
   return (
     <>
@@ -92,25 +96,35 @@ export function DailyPulse() {
 
           <SubsCard f={f} />
 
-          <Card title={`60-second script · ${words} words (~${Math.round(words / 2.5)} s)`} actions={!presentation && (
+          <Card title={`${f.isFriday ? 'Pulse + week recap' : 'Pulse script'} · ${words} words (~${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')})`} actions={!presentation && (
             <>
+              <Segmented label="View" value={mode} onChange={setMode} options={[{ value: 'read', label: 'Read' }, { value: 'edit', label: 'Edit' }]} />
               {saved.data !== null && <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => void db.kv.delete(KEY(d))}>Regenerate</Button>}
-              <Button className="h-7 px-2 text-xs" onClick={async () => { await copyText(script); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>{copied ? 'Copied' : 'Copy'}</Button>
+              <Button className="h-7 px-2 text-xs" onClick={async () => { await copyHtml(html, plainText(script)); flash('Copied with formatting'); }}>Copy for Teams/Outlook</Button>
+              <Button className="h-7 px-2 text-xs" onClick={async () => { await copyText(plainText(script)); flash('Copied'); }}>Copy text</Button>
               <Button variant="primary" className="h-7 px-2 text-xs" onClick={() => setBig(true)}>Read in large type</Button>
             </>
           )}>
-            {presentation ? <p className="font-display text-2xl leading-relaxed">{script}</p> : (
-              <textarea value={script} onChange={(e) => void db.kv.put({ key: KEY(d), value: e.target.value })} rows={6} aria-label="Pulse script" className="w-full rounded border border-border bg-surface p-3 text-base leading-relaxed" />
+            {copied && <p role="status" className="mb-2 text-xs text-grow">{copied}</p>}
+            {mode === 'edit' && !presentation ? (
+              <textarea value={script} onChange={(e) => void db.kv.put({ key: KEY(d), value: e.target.value })} rows={18} aria-label="Pulse script" className="w-full rounded border border-border bg-surface p-3 text-sm leading-relaxed" />
+            ) : (
+              // pulseHtml escapes everything; ** becomes bold, • lines become a list.
+              <div data-testid="pulse-script" className={cx('pulse-script leading-relaxed', presentation ? 'text-xl' : 'text-[15px]')} dangerouslySetInnerHTML={{ __html: html }} />
             )}
+            {words > PULSE_MAX_WORDS && <p className="mt-1 text-xs text-surveys">Over two minutes ({words} words; the limit is {PULSE_MAX_WORDS}). Trim it in Edit.</p>}
             {bad.length > 0 && <p className="mt-1 text-xs text-surveys">⚠ {bad.map((b) => `“${b.text}”`).join(', ')} {bad.length === 1 ? 'doesn’t' : 'don’t'} match the data for {f.periodLabel}.</p>}
-            <p className="mt-1 text-xs text-muted">Generated from the numbers above; edits are saved for {monthDay(d)}. Store numbers only, never names.</p>
+            <p className="mt-1 text-xs text-muted">
+              Built from the loaded data only; anything not loaded is said plainly. {doc.dropped > 0 && saved.data === null ? `${doc.dropped} lower-priority line${doc.dropped === 1 ? ' was' : 's were'} left out to stay under two minutes. ` : ''}
+              {f.isFriday ? 'Fridays add the week recap (Saturday through Thursday). ' : ''}Edits are saved for {monthDay(d)}; use **double asterisks** for bold. Comments are quoted from the redacted text; customer names never appear.
+            </p>
           </Card>
         </div>
       </PageGate>
       {big && (
         <div role="dialog" aria-modal="true" aria-label="Pulse script, large type" className="fixed inset-0 z-50 flex flex-col bg-bg p-12" onClick={() => setBig(false)}>
           <p className="mb-6 text-sm text-muted">HomeCare+ pulse · {f.periodLabel} · Esc or click to close</p>
-          <p className="max-w-[1100px] font-display text-[40px] leading-snug">{script}</p>
+          <div className="pulse-script max-w-[1100px] overflow-y-auto text-[30px] leading-snug" dangerouslySetInnerHTML={{ __html: html }} />
         </div>
       )}
     </>

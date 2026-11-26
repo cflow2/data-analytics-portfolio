@@ -21,7 +21,7 @@ export const SCREENS: ScreenDef[] = [
   { path: '/subscriptions', title: 'Subscriptions', subtitle: 'How many members did we add, where, and how does it relate to LTR?', icon: 'bars', needs: ['HomeCare+ subscription export (data - <timestamp>.xlsx), daily', 'LTR_Tracker*.xlsx'], phase: 11, group: 'Report' },
   { path: '/voc', title: 'VOC Themes', subtitle: 'What are members saying in their survey comments?', icon: 'quote', needs: ['LTR_Tracker*.xlsx or Medallia Responses export'], phase: 4, group: 'Listen' },
   { path: '/slide', title: 'LTR Slide', subtitle: 'What does this week’s LTR slide say, region by region?', icon: 'map', needs: ['LTR_Tracker*.xlsx', 'Analytics*.xlsx (Key Drivers, optional)'], phase: 8, group: 'Deliver' },
-  { path: '/pulse', title: 'Daily Pulse', subtitle: 'What do I say in 60 seconds at this morning’s meeting?', icon: 'pulse', needs: ['LTR_Tracker*.xlsx'], phase: 6, group: 'Deliver' },
+  { path: '/pulse', title: 'Daily Pulse', subtitle: 'What do I say in two minutes at this morning’s meeting? (Fridays add the week recap.)', icon: 'pulse', needs: ['LTR_Tracker*.xlsx'], phase: 6, group: 'Deliver' },
   { path: '/ask', title: 'Ask', subtitle: 'What does the loaded data say about…? (answered locally, never guessed)', icon: 'ask', needs: ['Any loaded week'], phase: 5, group: 'Deliver' },
   { path: '/review', title: 'Review Queue', subtitle: 'Which tags need a human decision?', icon: 'review', needs: ['Tagged survey or call records'], phase: 4, group: 'Manage' },
   { path: '/data', title: 'Data Manager', subtitle: 'What is loaded, is it clean, and which weeks does it cover?', icon: 'database', needs: [], phase: 2, group: 'Manage' },

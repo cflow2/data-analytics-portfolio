@@ -177,7 +177,37 @@ Each comparison says whether the gap is bigger than 2 standard errors ("bigger t
 
 ## Daily Pulse and Presentation mode
 
-- **Daily Pulse:** pick the meeting date (Monday covers the weekend). It shows the surveys that came in (share of 9–10, comment themes), every 0–8 score with store and theme, comments that mention damage or safety, the fiscal week so far against 93 (0–8 count vs the allowance), **subscriptions** (net added yesterday or over the weekend, fiscal week to date with in-store split, vs the same point last week, the top in-store stores), one thing to watch, and an editable ~60-second script with a large-type reading view. Every number in the script is checked against the data.
+- **Daily Pulse:** pick the meeting date. Tuesday–Friday covers yesterday; Monday covers the weekend.
+  - The cards show the surveys that came in, every 0–8 with store and theme, damage/safety comments, the fiscal week so far, and subscriptions (yesterday, week to date, same point last week, pace, top in-store stores).
+  - The **Pulse script** follows `docs/DAILY_PULSE_PROMPT.md` and is capped at **two minutes** (300 words at 150 a minute):
+    - Opening with the date and fiscal week
+    - **Customer experience:**
+      - yesterday's surveys, promoters and detractors
+      - LTR vs the day before
+      - week to date vs the same days of last week, vs 93
+      - fiscal year to date and the four-week trend
+      - a promoter quote, from the redacted text
+      - RedVest Associate recognition
+      - detractor root causes, and recurring or emerging themes
+    - **Subscriptions:**
+      - net new yesterday, plus the week and fiscal-year totals
+      - pace vs last week, and what's needed per remaining day
+      - in-store leaders for yesterday and for the week
+    - **Things to watch today:**
+      - LTR headroom at 93 and the theme to watch
+      - subscription pace and momentum
+      - today's appointments from the appointment file, or a note that none is loaded
+      - operational items: damage, overdue 48-hour follow-ups, no-shows
+  - **Fridays** add a **Week recap** for Saturday through Thursday:
+    - LTR vs the same days last week and vs 93
+    - how many more detractors today can take and still finish at 93
+    - the week's top themes, and recognition
+    - regions below 93
+    - subscriptions vs last week and what's needed today
+  - Lines are ranked, and the lowest-priority ones are dropped until the script fits two minutes; the page says how many were dropped.
+  - Anything not loaded is said plainly, never guessed.
+  - Key numbers are **bold**. **Copy for Teams/Outlook** keeps the bold and bullets; **Copy text** is plain.
+  - **Edit** lets you change the script (use `**double asterisks**` for bold). Edits are saved per date, and every number you type is checked against the data.
 - **Leadership questions log** lives on **LTR Slide**: questions logged at a WBR open the next week's talk track (“Last week I was asked about…”), each answered from that week's data, until marked answered. Answers pinned from **Ask** go to the slide's Back pocket.
 - **Presentation mode** (nav → Present): hides navigation, filters, edit controls and “Show original”; larger type; ← → move between screens; Esc exits.
 
@@ -220,7 +250,7 @@ src/
   domain/       types, taxonomy, attributes, geography
   tagging/      keyword rules engine, runner, taxonomy store, manual overrides
   slide/        LTR slide metrics, layout, map painting, talk track, PPTX builder, questions log
-  writing/      what-changed summary, daily pulse; number verification
+  writing/      what-changed summary, daily pulse (spec: docs/DAILY_PULSE_PROMPT.md), SM email; number verification
   ask/          local question planner + answers (no AI)
   analytics/    LTR pooling, compare baselines, grains, attributes, detractors, theme mentions, headline (pure, tested)
   db/           Dexie schema, backup/restore, queries
@@ -281,6 +311,7 @@ Evidence for each item in the brief's checklist. `unit` = Vitest (`npm test`); `
 | Keyboard navigation; Ctrl+K palette | ✅ | e2e (palette navigation, visible focus, focus moves to content on navigation); drag-reorder has ▲/▼ buttons; Review Queue keys |
 | LTR Slide: FW41 values (91, ▼4, −2, 6 of 14, 20 scored 0–8, allowed 15, 198/11/9, divisions 94/89/87, trend colours) | ✅ | unit `slide/ltrMetrics.test.ts`; also checked against the real Tracker 1123 |
 | LTR Slide exports: combo chart on a secondary axis, drivers chart, talk track + back pocket, no comment parts, PNG 3840×2160 | ✅ | e2e |
+| Daily Pulse: prompt structure, ≤ 2 minutes, Friday week recap, numbers verified on every day of a month | ✅ | unit `writing/pulse.test.ts`, e2e |
 | Detractors › Email SM: score, customer, phone, associate, Job ID, exact quote, Customer Information list; copies formatted HTML + plain text | ✅ | unit `writing/smEmail.test.ts`, e2e |
 | Phone layout: every screen fits an iPhone with no sideways scrolling; menu drawer; full-screen slide | ✅ | e2e `e2e/phone.cjs` |
 | WCAG AA contrast, light and dark (axe) | ✅ | a11y: 15 screens × 2 themes, **no violations of any severity** |

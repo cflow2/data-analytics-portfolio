@@ -120,3 +120,7 @@ body {
   main pre { white-space: pre-wrap; }
   [role='dialog'] { max-width: 100vw; }
 }
+
+/* Daily Pulse: the copied HTML carries Outlook fonts inline; on screen use the app's type. */
+.pulse-script > div { font-family: inherit !important; font-size: inherit !important; }
+.pulse-script b { font-weight: 650; }

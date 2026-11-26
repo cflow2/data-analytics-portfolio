@@ -46,6 +46,10 @@ export interface SubsPulse {
   samePointLastWeek: { subs: number; instore: number; through: ISODate } | null;
   priorWeekFull: { subs: number; instore: number };
   topInstore: { storeNo: string; label: string; instore: number; subs: number }[];
+  /** most in-store sales during the pulse period (yesterday / the weekend); empty when the period can't be worked out */
+  periodTopInstore: { storeNo: string; label: string; instore: number; subs: number }[];
+  /** fiscal year to date: completed weeks from the export plus this week to date */
+  fyTotal: number;
   /** the export is older than the day before the meeting */
   stale: boolean;
   /** on pace to beat the prior week's total? */
@@ -105,23 +109,28 @@ export function subsPulse(snaps: SubscriptionSnapshot[], weeks: SubscriptionWeek
   // Period: this export minus the one that ended the day before the period started.
   let period: SubsPulse['period'] = null;
   let periodNote: string | undefined;
+  let periodByStore: Record<string, [number, number]> | null = null;
   if (snap.through === to) {
     const before = byThrough(addDays(from, -1));
     const weekStarted = weekStart(snap.fw, fyStart) >= from; // the period began the week, so week-to-date is all of it
-    if (weekStarted) period = { ...wtd, from, to };
+    if (weekStarted) { period = { ...wtd, from, to }; periodByStore = snap.cur; }
     else if (before && before.fy === snap.fy && before.fw === snap.fw) {
       const b = sumSnap(before.cur, keep);
       period = { subs: wtd.subs - b.subs, instore: wtd.instore - b.instore, online: wtd.online - b.online, from, to };
+      periodByStore = Object.fromEntries(Object.entries(snap.cur).map(([no, [sv, iv]]) => [no, [sv - (before.cur[no]?.[0] ?? 0), iv - (before.cur[no]?.[1] ?? 0)] as [number, number]]));
     } else periodNote = `Load the export taken on ${from} (data through ${addDays(from, -1)}) to see what sold ${from === to ? 'that day' : 'in that period'}.`;
   } else periodNote = `The latest export covers through ${snap.through}; load the export with data through ${to}.`;
   const lw = byThrough(addDays(snap.through, -7));
   const samePointLastWeek = lw && lw.fw === snap.fw - 1 ? { ...sumSnap(lw.cur, keep), through: lw.through } : null;
   const priorWeekFull = sumSnap(snap.prior, keep);
-  const topInstore = Object.entries(snap.cur).filter(([no, v]) => keep(no) && v[1] > 0)
+  const leaders = (m: Record<string, [number, number]>) => Object.entries(m).filter(([no, v]) => keep(no) && v[1] > 0)
     .map(([no, [s, i]]) => ({ storeNo: no, label: storeShort(info.get(no), no), instore: i, subs: s }))
     .sort((a, b) => b.instore - a.instore || b.subs - a.subs || a.storeNo.localeCompare(b.storeNo)).slice(0, 5);
+  const topInstore = leaders(snap.cur);
+  const periodTopInstore = periodByStore ? leaders(periodByStore) : [];
+  const fyTotal = weeks.filter((w) => w.fy === snap.fy && w.fw < snap.fw && keep(w.storeNo)).reduce((a, w) => a + w.subs, 0) + wtd.subs;
   const pace = subsPace(snap.fw, days, wtd.subs, priorWeekFull.subs, samePointLastWeek ? samePointLastWeek.subs : null);
-  return { snap, fw: snap.fw, days, wtd, period, periodNote, samePointLastWeek, priorWeekFull, topInstore, stale: snap.through < to, pace };
+  return { snap, fw: snap.fw, days, wtd, period, periodNote, samePointLastWeek, priorWeekFull, topInstore, periodTopInstore, fyTotal, stale: snap.through < to, pace };
 }
 
 // ───────── weekly series and rankings ─────────

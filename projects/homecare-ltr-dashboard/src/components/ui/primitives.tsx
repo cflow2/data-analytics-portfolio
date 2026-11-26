@@ -14,9 +14,9 @@ export function Card({ children, className, title, actions, as: As = 'section' }
   return (
     <As className={cx('rounded-[12px] border border-border bg-surface p-4', className)}>
       {(title || actions) && (
-        <header className="mb-3 flex items-center justify-between gap-2">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
           {title && <h2 className="font-display text-sm font-semibold text-ink">{title}</h2>}
-          {actions && <div className="flex items-center gap-1">{actions}</div>}
+          {actions && <div className="flex flex-wrap items-center gap-1">{actions}</div>}
         </header>
       )}
       {children}

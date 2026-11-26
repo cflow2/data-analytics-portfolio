@@ -130,14 +130,23 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
 
   // 5. Daily Pulse is built from surveys
   await page.goto(url + '#/pulse'); await page.waitForTimeout(600);
-  const pulse = (await main()) + (await page.inputValue('textarea[aria-label="Pulse script"]'));
-  check('Daily Pulse includes subscriptions (weekend, week to date, same point last week)', /Subscriptions · FW41 day 2/.test(pulse) && /Same point last week/.test(pulse) && /Subscriptions: we added -?\d+ net over the weekend/.test(pulse), pulse.match(/Subscriptions:[^.]*\./)?.[0] ?? '');
+  const pulse = (await main()) + (await page.innerText('[data-testid="pulse-script"]'));
+  check('Daily Pulse includes subscriptions (weekend, week to date, same point last week)', /Subscriptions · FW41 day 2/.test(pulse) && /Same point last week/.test(pulse) && /Over the weekend we finished with -?\d+ net new subscriptions/.test(pulse), pulse.match(/Over the weekend we finished with -?\d+ net[^.]*\./)?.[0] ?? '');
   await page.goto(url + '#/subscriptions'); await page.waitForTimeout(800);
   const subsText = await main();
   check('Subscriptions screen: weekly chart, top in-store stores, LTR relationships', /Net subscriptions by week/.test(subsText) && /Most in-store subscriptions/.test(subsText) && /Weeks with a follow-up required score lower/.test(subsText));
   check('Pace vs last week shown on the Subscriptions screen and in the Pulse; red bars below the average', /(On pace to (beat|match)|Behind pace for|has already passed) FW40/.test(subsText) && /Red bars: weeks below the average to date/.test(subsText) && /(On pace to (beat|match)|Behind pace for|has already passed) FW40/.test(pulse));
   await page.goto(url + '#/pulse'); await page.waitForTimeout(400);
-  check('Daily Pulse script is built from surveys (no call counts)', /surveys? came in/.test(pulse) && !/customer calls?|cancellation calls?/i.test(pulse), pulse.slice(0, 120).replace(/\n/g, ' '));
+  check('Daily Pulse script is built from surveys (no call counts)', /we finished with \d+ surveys?/.test(pulse) && !/customer calls?|cancellation calls?/i.test(pulse), pulse.slice(0, 120).replace(/\n/g, ' '));
+  const script = await page.innerText('[data-testid="pulse-script"]');
+  const title = await page.locator('h2:has-text("Pulse script"), h3:has-text("Pulse script")').first().innerText().catch(() => '');
+  const words = Number(title.match(/(\d+) words/)?.[1] ?? 999);
+  check('Pulse follows the structure (opening, customer experience, subscriptions, things to watch) in two minutes or less',
+    /^Good morning! Here’s your HomeCare\+ Pulse for Monday, November 9/.test(script) && /Customer experience/.test(script) && /Things to watch today/.test(script)
+      && (await page.locator('[data-testid="pulse-script"] b').count()) > 5 && words <= 300, `${words} words · ${title}`);
+  await page.fill('input[aria-label="Meeting date"]', '2026-11-06'); await page.waitForTimeout(500);
+  const fri = await page.innerText('[data-testid="pulse-script"]');
+  check('Friday Pulse adds the week recap (Saturday through Thursday)', /Week recap, FW40/.test(fri) && /Saturday through Thursday, FW40 is at \d+\.\d%/.test(fri), fri.match(/Saturday through[^.]*\./)?.[0] ?? '');
 
   // 5b. LTR slide: native combo + drivers charts, talk track with back pocket, iPad-safe parts, PNG at 3840×2160
   await page.goto(url + '#/slide?fw=40'); await page.waitForTimeout(1500);
