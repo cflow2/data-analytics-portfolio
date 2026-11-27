@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Dataset } from '@/data/dataset';
-import { compareTopics, divisionName, sharedNegatives, type TopicRow } from '@/analytics/medalliaTopics';
+import { compareTopics, countsOff, divisionName, sharedNegatives, type TopicRow } from '@/analytics/medalliaTopics';
 import { themeName } from '@/domain/taxonomy';
 import { Card, Segmented, cx } from '@/components/ui/primitives';
 
@@ -11,7 +11,13 @@ const pct = (a: number, b: number) => (b ? `${Math.round((100 * a) / b)}%` : '�
  * A comparison only; LTR comes from the Tracker.
  */
 export function MedalliaTopicsCard({ ds, fw, division }: { ds: Dataset; fw: number; division: string | null }) {
-  const c = useMemo(() => compareTopics(ds.medalliaTopics ?? [], ds.surveys, ds.tags, fw), [ds, fw]);
+  const all = ds.medalliaTopics ?? [];
+  const hasWeek = all.some((t) => t.fw === fw), hasYtd = all.some((t) => t.fw === 0);
+  const [periodPick, setPeriod] = useState<'week' | 'ytd' | null>(null);
+  // fw 0 = exports covering a longer range (imported as “Whole export range”)
+  const period = periodPick === 'ytd' && hasYtd ? 'ytd' : periodPick === 'week' && hasWeek ? 'week' : hasWeek ? 'week' : hasYtd ? 'ytd' : 'week';
+  const c = useMemo(() => compareTopics(all, ds.surveys, ds.tags, period === 'ytd' ? 0 : fw), [all, ds, fw, period]);
+  const when = period === 'ytd' ? 'year to date' : `FW${fw}`;
   const options = c.divisions.length > 1 ? ['ALL_LOADED', ...c.divisions] : c.divisions;
   const [pick, setPick] = useState<string | null>(null);
   const sel = pick && options.includes(pick) ? pick : division && c.divisions.includes(division) ? division : options[0];
@@ -33,16 +39,19 @@ export function MedalliaTopicsCard({ ds, fw, division }: { ds: Dataset; fw: numb
 
   const check = c.checks.filter((x) => sel === 'ALL_LOADED' || x.division === sel);
   return (
-    <Card title={`Medallia topics · FW${fw}`} actions={options.length > 1 && (
-      <Segmented label="Division" value={sel} onChange={setPick} options={options.map((o) => ({ value: o, label: o === 'ALL_LOADED' ? 'All loaded' : divisionName(o) }))} />
-    )}>
+    <Card title={`Medallia topics · ${when}`} actions={<>
+      {hasWeek && hasYtd && <Segmented label="Period" value={period} onChange={setPeriod} options={[{ value: 'week', label: `FW${fw}` }, { value: 'ytd', label: 'Year to date' }]} />}
+      {options.length > 1 && <Segmented label="Division" value={sel} onChange={setPick} options={options.map((o) => ({ value: o, label: o === 'ALL_LOADED' ? 'All loaded' : divisionName(o) }))} />}
+    </>}>
+      {period === 'ytd' && !hasWeek && <p className="mb-2 text-xs text-muted">No FW{fw} exports yet; showing the year-to-date exports.</p>}
       <p className="mb-2 text-xs text-muted">
         Medallia’s own topic tags on the HomeCare+ comment (Text Analytics › Top and Bottom Topics). Impact is Medallia’s estimate of how much a topic moves Top 2 Box (LTR): positive helps, negative hurts.
         A comparison for the app’s themes; LTR still comes from the Tracker.
       </p>
       <ul className="mb-2 flex flex-wrap gap-x-4 gap-y-1 text-xs tnum">
         {check.map((x) => {
-          const off = x.medallia !== null && x.app > 0 && Math.abs(x.medallia - x.app) / x.app > 0.25;
+          const o = countsOff(x.medallia, x.app);
+          const off = o === 'low' || o === 'high';
           return (
             <li key={x.division} className={cx(off && 'text-surveys')}>
               <strong>{divisionName(x.division)}:</strong> Medallia {x.medallia?.toLocaleString('en-US') ?? '—'} comments · app {x.app.toLocaleString('en-US')} with a comment
@@ -67,7 +76,7 @@ export function MedalliaTopicsCard({ ds, fw, division }: { ds: Dataset; fw: numb
               <th className="py-1 pr-2 text-right font-medium">Comments</th>
               <th className="py-1 pr-2 text-right font-medium">Positive</th>
               <th className="py-1 pr-2 text-right font-medium">Negative</th>
-              <th className="py-1 pr-2 font-medium">App theme (tagged this week)</th>
+              <th className="py-1 pr-2 font-medium">App theme (tagged {period === 'ytd' ? 'in loaded weeks' : `in FW${fw}`})</th>
             </tr>
           </thead>
           <tbody>
@@ -76,6 +85,7 @@ export function MedalliaTopicsCard({ ds, fw, division }: { ds: Dataset; fw: numb
         </table>
       </div>
       <p className="mt-2 text-xs text-muted">
+        Medallia usually counts somewhat more comments than the Tracker (it includes responses the Tracker doesn’t); counts turn red only when they’re under 0.7× or over 2× the app’s.{' '}
         <span className="font-medium text-surveys">Not an app theme</span> / <span className="font-medium text-surveys">app found none</span>: Medallia has 3+ negative comments on it, and the app’s themes don’t cover it or tagged none of them this week. Worth a look in the comments, and maybe a new keyword rule. Topics with fewer than 3 comments are greyed out: too few to act on.
         The topic → theme mapping is in <code>src/analytics/medalliaTopics.ts</code>.
       </p>

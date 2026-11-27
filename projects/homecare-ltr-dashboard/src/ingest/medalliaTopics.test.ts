@@ -6,7 +6,7 @@ import { parseFile, topicGuessFromName } from './parse';
 import { commitParsed } from './commit';
 import { DEFAULT_REDACTION_RULES } from './redact';
 import { defaultTopicWeek } from '@/state/imports';
-import { appThemeFor, compareTopics, sharedNegatives } from '@/analytics/medalliaTopics';
+import { appThemeFor, compareTopics, countsOff, sharedNegatives } from '@/analytics/medalliaTopics';
 import type { MedalliaTopic } from '@/domain/types';
 
 const book = (aoa: unknown[][]) => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet0'); return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer; };
@@ -70,6 +70,16 @@ describe('Medallia Text Analytics topics', () => {
     expect(appThemeFor('Pricing & Discount - Value for Money')).toBe('value');
     expect(appThemeFor('Plumbing - Water Heaters')).toBe('completion');
     expect(appThemeFor('Brand/Store - Overall Satisfaction')).toBeNull();
+    // topic names from the real division exports
+    expect(appThemeFor('Building Supplies - Ventillation')).toBe('completion'); // dryer vent
+    expect(appThemeFor('Merchandise - Cancellations, Returns, and Refunds')).toBe('value');
+    expect(appThemeFor('Lighting & Ceiling Fans - Light Bulbs')).toBe('completion');
+    expect(appThemeFor('Building Supplies - Roofing')).toBe('completion');
+    expect(appThemeFor('Electrical - Fire Safety')).toBe('completion');
+    expect(appThemeFor('Filters - Other')).toBe('completion');
+    expect(appThemeFor('Appliances - Refrigerators')).toBe('completion');
+    expect(appThemeFor('Doors & Windows - Garage Doors')).toBe('completion');
+    expect(appThemeFor('Associate - Overall Statisfaction/Employee Recognition')).toBe('associate');
     const t = (division: string, section: MedalliaTopic['section'], topic: string, responses: number, negative: number): MedalliaTopic =>
       ({ id: `43:${division}:${section}:${topic}`, fw: 43, division, section, topic, impact: -1, responses, positive: responses - negative, negative, base: 100, sourceFile: 'x' });
     const c = compareTopics([
@@ -84,5 +94,32 @@ describe('Medallia Text Analytics topics', () => {
     expect(c.rows.find((r) => r.topic === 'Tools - Hand Tools')!.small).toBe(true);
     expect(c.rows.some((r) => r.topic === 'Old week')).toBe(false);
     expect(sharedNegatives(c.rows)).toEqual([{ topic: 'Plumbing - Water Heaters', divisions: ['WEST', 'NORTH'], negative: 7 }]);
+    // a top topic with a few negatives in several divisions is not a shared problem
+    const c2 = compareTopics([t('WEST', 'top', 'Associate - Customer Service', 300, 9), t('NORTH', 'top', 'Associate - Customer Service', 200, 4)], [], new Map(), 43);
+    expect(sharedNegatives(c2.rows)).toEqual([]);
+  });
+
+  it('counts only turn red when far apart (Medallia counts somewhat more than the Tracker)', () => {
+    expect(countsOff(130, 100)).toBe('ok');
+    expect(countsOff(60, 100)).toBe('low');
+    expect(countsOff(500, 10)).toBe('high');
+    expect(countsOff(null, 10)).toBeNull();
+    expect(countsOff(50, 0)).toBeNull();
+  });
+
+  it('a long-range export can be imported as year to date (week 0), and one imported as a week is flagged', async () => {
+    const db = new HomeCareDB('topics-ytd');
+    const s = (fw: number, i: number) => ({ id: `t${fw}-${i}`, source: 'tracker' as const, fw, date: '2026-11-22', storeNo: '0101', region: 'R1', division: 'NORTH', ltr: 10, comment: 'Great visit', sourceFile: 'x' });
+    await db.surveys.bulkPut([...Array.from({ length: 10 }, (_, i) => s(43, i)), ...Array.from({ length: 80 }, (_, i) => s(30, i))]);
+    const p = parseFile(req('north-Top_and_Bottom_Topics_6.xlsx', topBottom)); // base 141
+    expect(p.build!.topicGuess).toMatchObject({ division: 'NORTH' });
+    const asWeek = await commitParsed(p, { database: db, topicMeta: { division: 'NORTH', fw: 43 } });
+    expect(asWeek.warnings.join(' ')).toMatch(/longer date range.*Whole export range/);
+    const ytd = await commitParsed(p, { database: db, topicMeta: { division: 'NORTH', fw: 0 } });
+    expect(ytd.warnings).toEqual([]);
+    expect(ytd.info!.join(' ')).toMatch(/Year to date North: Medallia counted about 141 comments; the app has 90/);
+    expect(await db.medalliaTopics.where('fw').equals(0).count()).toBe(5);
+    const c = compareTopics(await db.medalliaTopics.toArray(), await db.surveys.toArray(), new Map(), 0);
+    expect(c.checks).toEqual([{ division: "NORTH", medallia: 141, app: 90, topics: 5 }]);
   });
 });

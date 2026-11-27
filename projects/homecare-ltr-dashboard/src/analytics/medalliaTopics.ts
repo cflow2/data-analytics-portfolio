@@ -12,10 +12,12 @@ import { DIVISION_ORDER as DIVS } from '@/config/regions';
 /** Medallia topic → the closest app theme. First match wins; edit here to change the mapping. */
 export const TOPIC_TO_THEME: { re: RegExp; theme: string }[] = [
   { re: /^associate\b|employee|professionalism|knowledge/i, theme: 'associate' },
+  // membership cancellations and refunds are about the plan's value, not a cancelled visit
+  { re: /refund|returns|pric|discount|value for money|cost|fee|subscription|membership/i, theme: 'value' },
   { re: /appointment|schedul|cancel|no[- ]?show|arrival|wait/i, theme: 'appointment' },
   { re: /damage|safety hazard|injur/i, theme: 'damage' },
-  { re: /pric|discount|value|cost|fee|subscription/i, theme: 'value' },
-  { re: /^(plumbing|electrical|hvac|appliance|tools?|outdoor|lawn|garage|roof|water)\b|water heater|dryer|filter|batter|smoke|detector/i, theme: 'completion' },
+  // the services themselves (Medallia files them under merchandise categories): dryer vent = “Building Supplies - Ventillation”
+  { re: /plumbing|electrical|hvac|heating|cooling|appliance|refrigerator|tools?\b|garage|roof|water|ventil|\bvents?\b|dryer|filter|batter|smoke|detector|fire safety|lighting|light bulb|ceiling fan|doors? & windows|building supplies/i, theme: 'completion' },
   { re: /accessib|aging|mobility/i, theme: 'aging' },
 ];
 
@@ -39,6 +41,16 @@ export interface TopicRow extends MedalliaTopic {
 
 export interface DivisionCheck { division: string; medallia: number | null; app: number; topics: number }
 
+/**
+ * Medallia counts somewhat more comments than the Tracker (it includes responses the Tracker doesn't), so only a big
+ * difference means a filter is off: under 0.7× or over 2×.
+ */
+export function countsOff(medallia: number | null, app: number): 'ok' | 'low' | 'high' | null {
+  if (medallia === null || app === 0) return null;
+  const r = medallia / app;
+  return r < 0.7 ? 'low' : r > 2 ? 'high' : 'ok';
+}
+
 export interface TopicComparison {
   fw: number;
   divisions: string[];
@@ -46,10 +58,11 @@ export interface TopicComparison {
   checks: DivisionCheck[];
 }
 
+/** `fw` 0 = exports that cover a longer range (year to date); compared with every loaded survey. */
 export function compareTopics(topics: MedalliaTopic[], surveys: SurveyRecord[], tags: Map<string, ThemeTag>, fw: number): TopicComparison {
   const week = topics.filter((t) => t.fw === fw);
   const divisions = [...new Set(week.map((t) => t.division))].sort((a, b) => DIVISION_ORDER.indexOf(a) - DIVISION_ORDER.indexOf(b));
-  const commented = surveys.filter((s) => s.fw === fw && countsForLtr(s) && s.comment.trim());
+  const commented = surveys.filter((s) => (fw === 0 || s.fw === fw) && countsForLtr(s) && s.comment.trim());
   const inDiv = (d: string) => commented.filter((s) => d === 'ALL' || surveyDivision(s) === d);
   const themeCount = new Map<string, number>();
   const countFor = (d: string, theme: string) => {
@@ -73,11 +86,11 @@ export function compareTopics(topics: MedalliaTopic[], surveys: SurveyRecord[], 
   return { fw, divisions, rows, checks };
 }
 
-/** Topics that are negative in more than one division this week (a company-wide issue, not a local one). */
+/** Bottom topics that show up in more than one division (a company-wide issue, not a local one). Top topics are left out: their few negatives are noise. */
 export function sharedNegatives(rows: TopicRow[]): { topic: string; divisions: string[]; negative: number }[] {
   const m = new Map<string, { divisions: string[]; negative: number }>();
   for (const r of rows) {
-    if (r.negative < 2) continue;
+    if (r.section === 'top' || r.negative < 2) continue;
     const v = m.get(r.topic) ?? { divisions: [], negative: 0 };
     if (!v.divisions.includes(r.division)) v.divisions.push(r.division);
     v.negative += r.negative;

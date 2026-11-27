@@ -147,7 +147,15 @@ The VOC Themes screen shows Medallia's own topic tags on the HomeCare+ comment f
 - **App found none:** the app has a matching theme but tagged none of that week's comments with it.
 - **Too few:** a topic with fewer than 3 comments. It's greyed out.
 
-The panel follows the Division filter, and **All loaded** shows every division together. It's a comparison only; LTR always comes from the Tracker. The topic → theme mapping is in `src/analytics/medalliaTopics.ts`.
+The panel follows the Division filter, and **All loaded** shows every division together.
+
+**Longer date ranges:**
+- An export covering a longer period (for example since the start of the year) can be imported with Fiscal week **Whole export range (year to date)**. The panel then gets a **FW## / Year to date** switch.
+- If a long-range file is imported as a single week, the import report warns.
+
+**Comment counts:**
+- Medallia counts somewhat more comments than the Tracker (it includes responses the Tracker doesn't), so some gap is normal.
+- Counts turn red only under 0.7× or over 2× the app's. It's a comparison only; LTR always comes from the Tracker. The topic → theme mapping is in `src/analytics/medalliaTopics.ts`.
 
 ## Email the store manager (Detractors)
 

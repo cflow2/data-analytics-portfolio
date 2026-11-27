@@ -65,6 +65,7 @@ export function FileCard({ file }: { file: StagedFile }) {
               <label className="flex flex-col gap-0.5 text-xs">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Fiscal week</span>
                 <select value={file.topicMeta?.fw ?? ''} onChange={(e) => setTopicMeta(file.key, { fw: Number(e.target.value) })} aria-label="Fiscal week this export covers" className="h-8 rounded-lg border border-border bg-surface px-2 text-sm">
+                  <option value={0}>Whole export range (year to date)</option>
                   {Array.from({ length: 52 }, (_, i) => 52 - i).map((w) => <option key={w} value={w}>{weekInfo(w, fyStart).label.split(' · WBR')[0]}</option>)}
                 </select>
               </label>

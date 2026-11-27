@@ -5,6 +5,7 @@ import type { FollowUpRecord, OriginalText, StoreRecord, SurveyRecord } from '@/
 import { normalizeApptId, textKey } from './normalize';
 import type { FollowUpCheck, ParsedFile, TopicMeta, ValidationReport } from './types';
 import { surveyDivision } from '@/analytics/ltr';
+import { countsOff } from '@/analytics/medalliaTopics';
 
 export async function lockedWeeks(database: HomeCareDB = defaultDb): Promise<Set<number>> {
   return new Set((await database.weeks.toArray()).filter((w) => w.locked).map((w) => w.fw));
@@ -234,20 +235,23 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
   if (b.medalliaTopics) {
     // One export per division and fiscal week: a re-import replaces that division's week.
     const fw = opts.topicMeta?.fw, division = opts.topicMeta?.division;
-    if (!fw || !division) throw new Error('Choose the division and fiscal week this Medallia topics export covers.');
+    if (fw === undefined || !division) throw new Error('Choose the division and fiscal week this Medallia topics export covers.');
     const rows = b.medalliaTopics.map((t) => ({ ...t, fw, division, id: `${fw}:${division}:${t.section}:${t.topic}` }));
     await database.medalliaTopics.where('fw').equals(fw).filter((t) => t.division === division).delete();
     await database.medalliaTopics.bulkPut(rows);
     report.weeks = { [fw]: rows.length };
     // Cross-check: Medallia's comment count vs HomeCare+ Tracker surveys with a comment for the same week and division.
     const base = rows[0]?.base ?? null;
-    const app = (await database.surveys.where('fw').equals(fw).toArray())
+    const app = (fw === 0 ? await database.surveys.toArray() : await database.surveys.where('fw').equals(fw).toArray())
       .filter((x) => countsForLtr(x) && x.comment.trim() && (division === 'ALL' || surveyDivision(x) === division)).length;
-    const label = division === 'ALL' ? 'all divisions' : division.charAt(0) + division.slice(1).toLowerCase();
-    if (base !== null && app > 0) {
-      const off = Math.abs(base - app) / app;
-      (off > 0.25 ? report.warnings : (report.info ??= [])).push(`FW${fw} ${label}: Medallia counted about ${base.toLocaleString('en-US')} comments; the app has ${app.toLocaleString('en-US')} HomeCare+ surveys with a comment.${off > 0.25 ? ' That’s far apart: check the export’s Survey Program, Division, dates and Topic filter.' : ''}`);
-    } else if (base !== null) (report.info ??= []).push(`FW${fw} ${label}: Medallia counted about ${base.toLocaleString('en-US')} comments. Load the Tracker for FW${fw} to compare.`);
+    const label = `${fw === 0 ? 'Year to date' : `FW${fw}`} ${division === 'ALL' ? 'all divisions' : division.charAt(0) + division.slice(1).toLowerCase()}`;
+    const off = countsOff(base, app);
+    if (off) {
+      const msg = `${label}: Medallia counted about ${base!.toLocaleString('en-US')} comments; the app has ${app.toLocaleString('en-US')} HomeCare+ surveys with a comment.`;
+      if (off === 'ok') (report.info ??= []).push(`${msg} Medallia usually counts somewhat more (it includes responses the Tracker doesn’t).`);
+      else if (off === 'high' && fw !== 0 && base! > 4 * app) report.warnings.push(`${msg} That’s many weeks of comments: the export probably covers a longer date range. Re-import it with Fiscal week “Whole export range (year to date)”, or re-run the export for FW${fw} only.`);
+      else report.warnings.push(`${msg} That’s far apart: check the export’s Survey Program, Division, dates and Topic filter.`);
+    } else if (base !== null) (report.info ??= []).push(`${label}: Medallia counted about ${base.toLocaleString('en-US')} comments. Load the Tracker to compare.`);
   }
   if (b.regionMap) await database.kv.put({ key: 'regionMap', value: b.regionMap });
   if (b.medalliaRange) await database.kv.put({ key: `medalliaRange:${b.medalliaRange.id}`, value: { ...b.medalliaRange, importedAt: new Date().toISOString() } });
