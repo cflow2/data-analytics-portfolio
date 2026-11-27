@@ -8,7 +8,7 @@ export type TagSource = 'AI' | 'Rule' | 'Manual' | 'Demo';
 export type FollowUpStatus = 'Documented' | 'Email only' | 'Missing';
 export type FileKind =
   | 'tracker' | 'medallia-responses' | 'medallia-analytics' | 'commentary'
-  | 'followup' | 'store-map' | 'appointments' | 'subscriptions' | 'demo';
+  | 'followup' | 'store-map' | 'appointments' | 'subscriptions' | 'medallia-topics' | 'demo';
 
 export type AttributeKey =
   | 'value' | 'scheduling' | 'quality' | 'timeToAppt' | 'processPrior'
@@ -158,6 +158,28 @@ export interface ThemeTag {
   source: TagSource;
   rationale?: string;
   reviewed?: boolean;
+}
+
+/**
+ * One topic row from a Medallia Text Analytics export (Top and Bottom Topics), for one division and one fiscal week.
+ * Medallia's own topic tags on the HomeCare+ comment; a comparison for the app's themes, never used for LTR.
+ */
+export interface MedalliaTopic {
+  id: string; // `${fw}:${division}:${section}:${topic}`
+  fw: number;
+  /** NORTH / SOUTH / WEST, or ALL for a company-wide export */
+  division: string;
+  section: 'top' | 'bottom' | 'list';
+  topic: string;
+  /** Medallia's impact on Top 2 Box (positive helps LTR); null when the export has no Impact Score */
+  impact: number | null;
+  responses: number;
+  positive: number;
+  negative: number;
+  /** comments in the whole export (# of responses ÷ % of responses) */
+  base: number | null;
+  sourceFile: string;
+  demo?: boolean;
 }
 
 export interface OriginalText {

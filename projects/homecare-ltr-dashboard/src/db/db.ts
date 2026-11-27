@@ -1,7 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type {
   SurveyRecord, AppointmentRecord, FollowUpRecord, SubscriptionWeek, SubscriptionSnapshot, AttributeWeekly, StoreRecord, ThemeTag, OriginalText,
-  ImportedFile, WeekMeta, LeadershipQuestion, KV,
+  ImportedFile, WeekMeta, LeadershipQuestion, KV, MedalliaTopic,
 } from '@/domain/types';
 
 export class HomeCareDB extends Dexie {
@@ -14,6 +14,8 @@ export class HomeCareDB extends Dexie {
   /** one per subscription export: current/prior week by store, for “yesterday” and same-point-last-week */
   subscriptionSnapshots!: EntityTable<SubscriptionSnapshot, 'id'>;
   attributeWeekly!: EntityTable<AttributeWeekly, 'id'>;
+  /** Medallia Text Analytics topics by fiscal week and division (comparison only) */
+  medalliaTopics!: EntityTable<MedalliaTopic, 'id'>;
   stores!: EntityTable<StoreRecord, 'storeNo'>;
   tags!: EntityTable<ThemeTag, 'recordId'>;
   /** Unredacted text. Only read by the "Show original" toggle; never exported to AI or WBR. */
@@ -55,13 +57,15 @@ export class HomeCareDB extends Dexie {
     this.version(3).stores({ appointments: 'id, associate, storeNo, fw, jobId' });
     // v4: subscription exports
     this.version(4).stores({ subscriptionWeeks: 'id, fy, fw, storeNo, region', subscriptionSnapshots: 'id, through, fw' });
+    // v5: Medallia Text Analytics topic exports (one per division and week)
+    this.version(5).stores({ medalliaTopics: 'id, fw, division' });
   }
 }
 
 export const db = new HomeCareDB();
 
 export const DATA_TABLES = [
-  'surveys', 'appointments', 'subscriptionWeeks', 'subscriptionSnapshots', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
+  'surveys', 'appointments', 'subscriptionWeeks', 'subscriptionSnapshots', 'medalliaTopics', 'followups', 'attributeWeekly', 'stores', 'tags', 'originals', 'files',
   'weeks', 'questions', 'kv',
 ] as const;
 export type DataTable = (typeof DATA_TABLES)[number];

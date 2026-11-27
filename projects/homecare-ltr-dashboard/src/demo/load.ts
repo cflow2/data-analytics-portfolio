@@ -19,8 +19,9 @@ export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys
   };
   for (const s of d.surveys) { const r = pass(s.id, 'comment', s.comment); s.comment = r.text; s.source = 'demo'; if (r.uncertain) s.redactionUncertain = true; }
   for (const f of d.followups) { f.comment = pass(f.id, 'comment', f.comment).text; f.insights = pass(f.id, 'insights', f.insights).text; }
-  await database.transaction('rw', [database.stores, database.surveys, database.appointments, database.subscriptionWeeks, database.subscriptionSnapshots, database.followups, database.tags, database.weeks, database.questions, database.files, database.kv, database.originals], async () => {
+  await database.transaction('rw', [database.stores, database.surveys, database.appointments, database.subscriptionWeeks, database.subscriptionSnapshots, database.medalliaTopics, database.followups, database.tags, database.weeks, database.questions, database.files, database.kv, database.originals], async () => {
     await database.originals.bulkPut(originals);
+    await database.medalliaTopics.bulkPut(d.medalliaTopics);
     await database.stores.bulkPut(d.stores);
     await database.surveys.bulkPut(d.surveys);
     await database.followups.bulkPut(d.followups);
@@ -45,7 +46,8 @@ export async function loadDemoData(database: HomeCareDB = db): Promise<{ surveys
 /** Removes only DEMO records, leaving real uploads untouched. */
 export async function removeDemoData(database: HomeCareDB = db): Promise<void> {
   const d = generateDemoData();
-  await database.transaction('rw', [database.stores, database.surveys, database.appointments, database.subscriptionWeeks, database.subscriptionSnapshots, database.followups, database.tags, database.weeks, database.questions, database.files, database.kv, database.originals], async () => {
+  await database.transaction('rw', [database.stores, database.surveys, database.appointments, database.subscriptionWeeks, database.subscriptionSnapshots, database.medalliaTopics, database.followups, database.tags, database.weeks, database.questions, database.files, database.kv, database.originals], async () => {
+    await database.medalliaTopics.filter((t) => !!t.demo).delete();
     const ids = [...d.surveys.map((s) => s.id), ...d.followups.map((f) => f.id)];
     await database.originals.where('recordId').anyOf(ids).delete();
     await database.surveys.filter((s) => !!s.demo).delete();

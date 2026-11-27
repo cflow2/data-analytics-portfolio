@@ -114,6 +114,10 @@ const DEMO_PII = ['(555)', '@example.com', 'Jane Sample', 'John Example', 'Pat P
   await page.goto(url + '#/voc?fw=40'); await page.waitForTimeout(700);
   const voc = await main();
   check('VOC Themes shows where LTR points went and services members want added', /Where LTR points went/.test(voc) && /Services members want added/.test(voc) && /Tankless water heater/.test(voc));
+  const vocAll = voc;
+  check('VOC Themes compares the imported Medallia topics export (West FW40: comment counts, app theme, missing divisions)',
+    /Medallia topics · FW40/i.test(vocAll) && /Medallia \d+ comments · app \d+ with a comment/.test(vocAll) && /Not loaded: [A-Za-z, ]*North/.test(vocAll) && /Plumbing - Water Heaters/.test(vocAll),
+    (vocAll.match(/[A-Z][a-z]+: Medallia \d+ comments · app \d+[^\n]*/) ?? [''])[0]);
 
   // 4c. Store manager email for a detractor (composer, preview, copy)
   await page.goto(url + '#/detractors?fw=40'); await page.waitForTimeout(800);

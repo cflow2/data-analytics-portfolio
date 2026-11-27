@@ -145,6 +145,16 @@ export function demoFiles(d: DemoData = generateDemoData()): DemoFile[] {
       ...d.followups.filter((f) => f.fw === 40).map((f) => [dateCell(f.date), f.score, f.comment, Number(f.storeNo), f.sm, f.insights, f.region, 40, 4, 10])]]]),
   });
 
+  // 8. Medallia Text Analytics › Top and Bottom Topics, West FW40 (laid out like the real export)
+  const west = d.medalliaTopics.filter((t) => t.division === 'WEST');
+  const head = ['', 'Impact Score', '# of Responses', '% of Responses', '# Positive', '% Positive', '# Negative', '% Negative'];
+  const line = (t: (typeof west)[number]) => [t.topic, t.impact, t.responses, (100 * t.responses) / (t.base ?? 1), t.positive, (100 * t.positive) / t.responses, t.negative, (100 * t.negative) / t.responses];
+  files.push({
+    name: 'Top and Bottom Topics FW40 WEST DEMO.xlsx',
+    data: book([['Sheet0', [['Survey Export'], [], ['Top and Bottom Topics'], [], ['Top Topics'], head, ...west.filter((t) => t.section === 'top').map(line),
+      ['Top and Bottom Topics'], [], ['Bottom Topics'], head, ...west.filter((t) => t.section === 'bottom').map(line)]]]),
+  });
+
   // 7. Store → District mapping CSV
   const csv = ['Store #,Store Name,City,State,District,Region', ...stores.map((s) => [s.storeNo, s.name, s.city, s.state, s.district ?? '', s.region].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n');
   files.push({ name: 'Store_District_Map_DEMO.csv', data: new TextEncoder().encode(csv).buffer as ArrayBuffer });

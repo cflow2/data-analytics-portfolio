@@ -20,7 +20,7 @@ export const SERVICES: ServiceDef[] = [
   { id: 'windows', label: 'Window cleaning', re: /\bwindows?\b[^.]{0,20}\b(clean|wash)|\b(clean|wash)\w*\b[^.]{0,20}\bwindows?\b/i },
   { id: 'lighting', label: 'Light bulbs / fixtures', re: /\b(light ?bulbs?|can lights?|recessed light\w*|light fixtures?)\b/i },
   { id: 'ceiling-fans', label: 'Ceiling fans', re: /\bceiling fans?\b/i },
-  { id: 'detectors', label: 'Smoke / CO detectors', re: /\b(smoke (detector|alarm)s?|carbon monoxide|co (detector|alarm)s?)\b/i },
+  { id: 'detectors', label: 'Smoke / CO detectors & batteries', re: /\b(smoke (detector|alarm)s?|carbon monoxide|co (detector|alarm)s?|(detector|alarm) batter(y|ies)|batter(y|ies)\b[^.]{0,30}\b(detector|alarm|smoke)s?)\b/i },
   { id: 'garage-door', label: 'Garage door', re: /\bgarage doors?\b/i },
   { id: 'water-treatment', label: 'Water softener / filtration', re: /\b(water softener|whole[- ]house (water )?filter|water filtration|reverse osmosis)\b/i },
   { id: 'sump-pump', label: 'Sump pump', re: /\bsump pumps?\b/i },

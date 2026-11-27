@@ -4,12 +4,13 @@ import { parseInWorker } from '@/ingest/client';
 import { commitParsed } from '@/ingest/commit';
 import { runRuleTagging } from '@/tagging/run';
 import { hashBytes } from '@/ingest/normalize';
-import type { ParsedFile, ParseRequest, ValidationReport } from '@/ingest/types';
+import type { ParsedFile, ParseRequest, TopicMeta, ValidationReport } from '@/ingest/types';
 import type { Candidate, ColumnMapping } from '@/ingest/specs';
 import { getRedactionRules, getRememberedMappings, getSalt, rememberMapping } from './privacy';
 import { getRegionConfig } from '@/config/regions';
 import { useSettings } from './settings';
-import { todayISO } from '@/lib/dates';
+import { todayISO, weekday, type ISODate } from '@/lib/dates';
+import { fiscalWeek } from '@/lib/fiscal';
 
 export type StageStatus = 'parsing' | 'needs-mapping' | 'ready' | 'importing' | 'imported' | 'error';
 
@@ -23,6 +24,8 @@ export interface StagedFile {
   report?: ValidationReport;
   error?: string;
   previouslyImported?: string;
+  /** Medallia topics export: which division and fiscal week it covers (required before import) */
+  topicMeta?: TopicMeta;
 }
 
 interface ImportState {
@@ -32,12 +35,19 @@ interface ImportState {
   importOne: (key: string) => Promise<void>;
   importAll: () => Promise<void>;
   remove: (key: string) => void;
+  setTopicMeta: (key: string, meta: TopicMeta) => void;
   clearFinished: () => void;
 }
 
 async function request(name: string, buffer: ArrayBuffer, force?: ParseRequest['force']): Promise<ParseRequest> {
   const [rules, salt, remembered, regionCfg] = await Promise.all([getRedactionRules(), getSalt(), getRememberedMappings(), getRegionConfig()]);
   return { fileId: hashBytes(buffer), name, buffer: buffer.slice(0), fyStart: useSettings.getState().fyStart, rules, salt, remembered, force, today: todayISO(), pictureMap: regionCfg.pictures };
+}
+
+/** The fiscal week a topics export most likely covers: the latest week that has ended by today (Friday counts). */
+export function defaultTopicWeek(today: ISODate, fyStart?: ISODate): number {
+  const fw = fiscalWeek(today, fyStart);
+  return weekday(today) === 5 ? fw : Math.max(1, fw - 1);
 }
 
 function statusFor(p: ParsedFile): StageStatus {
@@ -55,9 +65,11 @@ export const useImports = create<ImportState>((set, get) => {
     patch(key, { status: 'parsing', error: undefined });
     const parsed = await parseInWorker(await request(f.name, f.buffer, force));
     const prev = await db.files.get(parsed.fileId);
+    const guess = parsed.build?.topicGuess;
     patch(key, {
       parsed, status: statusFor(parsed), error: parsed.error,
       previouslyImported: prev?.importedAt,
+      ...(guess ? { topicMeta: { division: f.topicMeta?.division ?? guess.division, fw: f.topicMeta?.fw ?? guess.fw ?? defaultTopicWeek(todayISO(), useSettings.getState().fyStart) } } : {}),
     });
   };
 
@@ -81,7 +93,7 @@ export const useImports = create<ImportState>((set, get) => {
       if (!f?.parsed?.build) return;
       patch(key, { status: 'importing' });
       try {
-        const report = await commitParsed(f.parsed);
+        const report = await commitParsed(f.parsed, { topicMeta: f.topicMeta });
         // Tag the weeks this file touched with the keyword rules (Manual/AI tags are kept).
         const fws = Object.keys(report.weeks).map(Number);
         if (['tracker', 'medallia-responses', 'commentary'].includes(report.kind) && fws.length) await runRuleTagging({ fws });
@@ -92,11 +104,13 @@ export const useImports = create<ImportState>((set, get) => {
     },
     importAll: async () => {
       // Tracker first so other sources can merge into it; store maps last.
-      const order: Candidate['kind'][] = ['tracker', 'medallia-responses', 'commentary', 'medallia-analytics', 'followup', 'store-map'];
-      const ready = get().files.filter((f) => f.status === 'ready')
+      const order: Candidate['kind'][] = ['tracker', 'medallia-responses', 'commentary', 'medallia-analytics', 'medallia-topics', 'followup', 'appointments', 'subscriptions', 'store-map'];
+      // A topics export without a division waits for the user to pick one.
+      const ready = get().files.filter((f) => f.status === 'ready' && (f.parsed?.candidate?.kind !== 'medallia-topics' || f.topicMeta?.division))
         .sort((a, b) => order.indexOf(a.parsed!.candidate!.kind) - order.indexOf(b.parsed!.candidate!.kind));
       for (const f of ready) await get().importOne(f.key);
     },
+    setTopicMeta: (key, meta) => patch(key, { topicMeta: { ...get().files.find((x) => x.key === key)?.topicMeta, ...meta } }),
     remove: (key) => set((s) => ({ files: s.files.filter((f) => f.key !== key) })),
     clearFinished: () => set((s) => ({ files: s.files.filter((f) => f.status !== 'imported') })),
   };

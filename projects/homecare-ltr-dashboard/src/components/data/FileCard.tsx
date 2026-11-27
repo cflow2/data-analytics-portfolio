@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { SPEC_BY_KIND } from '@/ingest/specs';
 import { rangeLabel } from '@/lib/dates';
+import { weekInfo } from '@/lib/fiscal';
+import { useSettings } from '@/state/settings';
 import { useImports, type StagedFile } from '@/state/imports';
 import { Button, cx } from '@/components/ui/primitives';
 import { Icon } from '@/components/ui/Icon';
@@ -17,7 +19,8 @@ const STATUS: Record<StagedFile['status'], { label: string; cls: string }> = {
 };
 
 export function FileCard({ file }: { file: StagedFile }) {
-  const { importOne, remove, reparse } = useImports();
+  const { importOne, remove, reparse, setTopicMeta } = useImports();
+  const fyStart = useSettings((x) => x.fyStart);
   const [open, setOpen] = useState(false);
   const [mapping, setMapping] = useState(false);
   const p = file.parsed;
@@ -25,6 +28,8 @@ export function FileCard({ file }: { file: StagedFile }) {
   const r = file.report ?? p?.build?.report;
   const weeks = r ? Object.keys(r.weeks).map(Number).sort((a, b) => a - b) : [];
   const st = STATUS[file.status];
+  const topics = c?.kind === 'medallia-topics';
+  const needsDivision = topics && file.status === 'ready' && !file.topicMeta?.division;
 
   return (
     <article className="rounded-[12px] border border-border bg-surface p-3" aria-label={file.name}>
@@ -47,13 +52,32 @@ export function FileCard({ file }: { file: StagedFile }) {
           {c && c.missing.length > 0 && (
             <p className="mt-1 text-xs text-surveys">Missing required column(s): {c.missing.map((k) => SPEC_BY_KIND[c.kind].fields.find((f) => f.key === k)?.label).join(', ')}</p>
           )}
+          {topics && file.status !== 'imported' && (
+            <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg bg-surface-2 px-2 py-1.5">
+              <label className="flex flex-col gap-0.5 text-xs">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Division</span>
+                <select value={file.topicMeta?.division ?? ''} onChange={(e) => setTopicMeta(file.key, { division: e.target.value || undefined })} aria-label="Division this export covers"
+                  className={cx('h-8 rounded-lg border bg-surface px-2 text-sm', needsDivision ? 'border-surveys' : 'border-border')}>
+                  <option value="">Choose…</option>
+                  <option value="NORTH">North</option><option value="SOUTH">South</option><option value="WEST">West</option><option value="ALL">All divisions</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-0.5 text-xs">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-muted">Fiscal week</span>
+                <select value={file.topicMeta?.fw ?? ''} onChange={(e) => setTopicMeta(file.key, { fw: Number(e.target.value) })} aria-label="Fiscal week this export covers" className="h-8 rounded-lg border border-border bg-surface px-2 text-sm">
+                  {Array.from({ length: 52 }, (_, i) => 52 - i).map((w) => <option key={w} value={w}>{weekInfo(w, fyStart).label.split(' · WBR')[0]}</option>)}
+                </select>
+              </label>
+              <p className="pb-1 text-xs text-muted">Medallia doesn’t write the division or dates into this export. {file.topicMeta?.division ? 'Check both before importing.' : 'Pick the division to import.'} Name files like “Topics FW43 WEST.xlsx” and they fill in automatically.</p>
+            </div>
+          )}
           {file.error && <p role="alert" className="mt-1 text-xs text-surveys">{file.error}</p>}
           {file.previouslyImported && file.status === 'ready' && (
             <p className="mt-1 text-xs text-muted">This exact file was imported on {new Date(file.previouslyImported).toLocaleDateString()}. Importing again updates records; it won’t duplicate them.</p>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          {file.status === 'ready' && <Button variant="primary" onClick={() => importOne(file.key)}>Import</Button>}
+          {file.status === 'ready' && <Button variant="primary" disabled={needsDivision} title={needsDivision ? 'Choose the division first' : undefined} onClick={() => importOne(file.key)}>Import</Button>}
           {(file.status === 'needs-mapping' || file.status === 'ready' || (file.status === 'error' && p?.sheets.length)) && p && (
             <Button variant={file.status === 'needs-mapping' ? 'primary' : 'ghost'} onClick={() => setMapping(true)}>Map columns</Button>
           )}

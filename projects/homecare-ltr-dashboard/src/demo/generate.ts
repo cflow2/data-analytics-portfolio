@@ -6,9 +6,10 @@ import { Rng, jitterSplit } from '@/lib/random';
 import { addDays, type ISODate } from '@/lib/dates';
 import { weekStart, DEFAULT_FY_START } from '@/lib/fiscal';
 import { REGIONS } from '@/domain/geo';
+import { divisionOf } from '@/config/regions';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AppointmentRecord, AttributeKey, FollowUpRecord, LeadershipQuestion, Sentiment, SubscriptionSnapshot, SubscriptionWeek,
+  AppointmentRecord, AttributeKey, FollowUpRecord, LeadershipQuestion, MedalliaTopic, Sentiment, SubscriptionSnapshot, SubscriptionWeek,
   StoreRecord, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
@@ -24,6 +25,8 @@ export interface DemoData {
   /** subscription export: store × week through Sun Nov 8 (FW41 in progress), and one snapshot per day FW39–FW41 */
   subscriptionWeeks: SubscriptionWeek[];
   subscriptionSnapshots: SubscriptionSnapshot[];
+  /** Medallia Text Analytics top/bottom topics for FW40, one export per division */
+  medalliaTopics: MedalliaTopic[];
   tags: ThemeTag[];
   weeks: WeekMeta[];
   questions: LeadershipQuestion[];
@@ -361,7 +364,29 @@ export function generateDemoData(seed = 4040): DemoData {
   });
 
   const { subscriptionWeeks, subscriptionSnapshots } = demoSubscriptions(seed + 11, stores, surveys);
-  return { stores, surveys, followups, tags, weeks, questions, appointments, subscriptionWeeks, subscriptionSnapshots };
+  const medalliaTopics = demoMedalliaTopics(seed + 17, surveys);
+  return { stores, surveys, followups, tags, weeks, questions, appointments, subscriptionWeeks, subscriptionSnapshots, medalliaTopics };
+}
+
+// ───────────────────────────── Medallia topics ─────────────────────────────
+const DEMO_TOP = ['Associate - Customer Service', 'Associate - Overall Satisfaction/Employee Recognition', 'Associate - Professionalism', 'Associate - Knowledge/Accuracy of Information', 'Brand/Store - Overall Satisfaction'];
+const DEMO_BOTTOM = ['Plumbing - Water Heaters', 'Electrical - Batteries', 'Account Management - Appointments', 'Electrical - Fire Safety', 'Tools - Hand Tools'];
+
+/** FW40 Top and Bottom Topics per division, sized to the demo comments (Medallia's own tags, so the counts differ a little). */
+function demoMedalliaTopics(seed: number, surveys: SurveyRecord[]): MedalliaTopic[] {
+  const rng = new Rng(seed);
+  const out: MedalliaTopic[] = [];
+  for (const division of ['NORTH', 'SOUTH', 'WEST']) {
+    const n = surveys.filter((s) => s.fw === 40 && s.comment.trim() && divisionOf(s.region) === division).length;
+    const base = Math.max(10, n + rng.int(-2, 2));
+    const add = (section: 'top' | 'bottom', topic: string, responses: number, negShare: number, impact: number) => {
+      const negative = Math.round(responses * negShare);
+      out.push({ id: `40:${division}:${section}:${topic}`, fw: 40, division, section, topic, impact: Math.round(impact * 1000) / 1000, responses, positive: responses - negative - (negShare > 0 && negShare < 1 ? rng.int(0, 1) : 0), negative, base, sourceFile: DEMO_SOURCE, demo: true });
+    };
+    DEMO_TOP.forEach((t, i) => add('top', t, Math.max(2, Math.round(base * (0.32 - i * 0.04)) + rng.int(-1, 1)), i === 3 ? 0.04 : 0, 1.6 - i * 0.22 + rng.float() * 0.1));
+    DEMO_BOTTOM.forEach((t, i) => add('bottom', t, i === 4 ? 1 : Math.max(2, rng.int(3, 6)), i === 4 ? 0 : 0.67 + (i % 2) * 0.33, -1.3 + i * 0.32 + rng.float() * 0.05));
+  }
+  return out;
 }
 
 // ───────────────────────────── subscriptions ─────────────────────────────

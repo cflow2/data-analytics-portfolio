@@ -5,6 +5,7 @@ import { geoMatch } from '@/analytics/ltr';
 import { pointsLost } from '@/analytics/pointsLost';
 import { PointsLostCard } from '@/components/voc/PointsLostCard';
 import { ServicesWanted } from '@/components/voc/ServicesWanted';
+import { MedalliaTopicsCard } from '@/components/voc/MedalliaTopicsCard';
 import { maturity, themeHistory, weekOfTheme } from '@/analytics/themes';
 import { storeLabel, REGIONS } from '@/domain/geo';
 import { monthDay } from '@/lib/dates';
@@ -124,6 +125,8 @@ export function VocThemes() {
           </Card>
 
           <ServicesWanted surveys={v.vocAll} tags={ds.tags} stores={ds.stores} fw={v.fw} />
+
+          <MedalliaTopicsCard ds={ds} fw={v.fw} division={data.geo.division ?? null} />
 
           <div className="grid grid-cols-2 gap-3">
             {([['service-add', 'Service-add requests', v.serviceAdd], ['aging', 'Aging in place / accessibility', v.aging]] as const).map(([id, title, list]) => (

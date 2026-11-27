@@ -144,6 +144,17 @@ export const SPECS: KindSpec[] = [
     ],
   },
   {
+    // Text Analytics › Top and Bottom Topics (or any topic table). The topic name is the unlabelled first column.
+    kind: 'medallia-topics', label: 'Medallia Text Analytics topics (one division, one week)', fileHint: /topic|theme/i,
+    fields: [
+      { key: 'responses', label: '# of Responses', required: true, aliases: ['# of responses', 'number of responses'] },
+      { key: 'positive', label: '# Positive', required: true, aliases: ['# positive'] },
+      { key: 'negative', label: '# Negative', required: true, aliases: ['# negative'] },
+      { key: 'pctResponses', label: '% of Responses', required: false, aliases: ['% of responses'] },
+      { key: 'impact', label: 'Impact Score', required: false, aliases: ['impact score', 'impact'] },
+    ],
+  },
+  {
     kind: 'store-map', label: 'Store → District mapping', fileHint: /(store|district).*(map|district)/i,
     fields: [
       { key: 'storeNo', label: 'Store #', required: true, aliases: ['store #', 'store', 'store number', 'store no'] },

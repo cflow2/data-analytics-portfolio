@@ -9,7 +9,7 @@ import { expectedScore100 } from '@/lib/ltr';
 import { normalizeRegion, normalizeStoreNo, parseStoreName } from '@/domain/geo';
 import { ATTRIBUTES } from '@/domain/attributes';
 import type {
-  AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, SubscriptionSnapshot, SubscriptionWeek, OriginalText, StoreRecord, SurveyRecord, SurveySource,
+  AppointmentRecord, AttributeKey, AttributeWeekly, FollowUpRecord, MedalliaTopic, SubscriptionSnapshot, SubscriptionWeek, OriginalText, StoreRecord, SurveyRecord, SurveySource,
 } from '@/domain/types';
 import { addDays, diffDays, monthDay, todayISO, weekday, type ISODate } from '@/lib/dates';
 import {
@@ -18,7 +18,7 @@ import {
 import { ATTR_FIELDS, ATTR_FIELD_KEYS, SPEC_BY_KIND, detectCandidates, matchFields, type Candidate } from './specs';
 import { redact, knownNamesRule, type RedactionRule } from './redact';
 import { classifyInsight } from './followup';
-import type { BuildResult, MedalliaRange, ParsedFile, ParseRequest, ValidationReport } from './types';
+import type { BuildResult, MedalliaRange, ParsedFile, ParseRequest, TopicMeta, ValidationReport } from './types';
 
 export interface Sheet { name: string; rows: unknown[][] }
 
@@ -598,6 +598,59 @@ function buildAnalyticsWide(ctx: Ctx, w: WideLayout): { aw: AttributeWeekly[]; r
   return { aw: out, range };
 }
 
+// ───────────────────────── Medallia Text Analytics topics ─────────────────────────
+/** Division and fiscal week from a file name like “Top and Bottom Topics FW43 WEST.xlsx”. */
+export function topicGuessFromName(name: string): TopicMeta {
+  const d = /\b(north|south|west)\b/i.exec(name.replace(/[_.-]/g, ' '));
+  const w = /\bfw\s?(\d{1,2})\b/i.exec(name.replace(/[_.-]/g, ' '));
+  return { ...(d ? { division: d[1].toUpperCase() } : {}), ...(w ? { fw: Number(w[1]) } : {}) };
+}
+
+/**
+ * Every topic table in the sheet (“Top Topics”, “Bottom Topics”, or a single list). A block starts at a header row
+ * with # of Responses / # Positive / # Negative; its section is the nearest title above it; it ends at the first
+ * row without a response count. The topic name is the first text cell left of the counts.
+ */
+function buildTopics(ctx: Ctx, rows: unknown[][]): { topics: MedalliaTopic[]; base: number | null } {
+  const r = ctx.report;
+  const spec = SPEC_BY_KIND['medallia-topics'];
+  const out: MedalliaTopic[] = [];
+  let base: number | null = null;
+  const seen = new Set<string>();
+  for (let h = 0; h < rows.length; h++) {
+    const { map, missing } = matchFields(rows[h] ?? [], spec);
+    if (missing.length) continue;
+    let title = '';
+    for (let k = h - 1; k >= Math.max(0, h - 3) && !title; k--) title = (rows[k] ?? []).map(cellText).find((x) => x.trim()) ?? '';
+    const section: MedalliaTopic['section'] = /bottom/i.test(title) ? 'bottom' : /top/i.test(title) ? 'top' : 'list';
+    for (let i = h + 1; i < rows.length; i++) {
+      const row = rows[i] ?? [];
+      const n = parseNumber(get(row, map, 'responses'));
+      if (n === null) break;
+      r.rowsRead++;
+      const firstNum = Math.min(...Object.values(map));
+      const topic = row.slice(0, firstNum).map(cellText).map((x) => x.trim()).find((x) => x && !/^\d+$/.test(x)) ?? '';
+      if (!topic) { drop(r, 'No topic name'); continue; }
+      const key = `${section}:${topic}`;
+      if (seen.has(key)) { drop(r, 'Topic listed twice'); continue; }
+      seen.add(key);
+      const pct = parseNumber(get(row, map, 'pctResponses'));
+      if (base === null && pct && pct > 0) base = Math.round((n * 100) / pct);
+      out.push({
+        id: '', fw: 0, division: '', section, topic, impact: parseNumber(get(row, map, 'impact')),
+        responses: n, positive: parseNumber(get(row, map, 'positive')) ?? 0, negative: parseNumber(get(row, map, 'negative')) ?? 0,
+        base: null, sourceFile: ctx.fileName,
+      });
+      r.rowsKept++;
+    }
+  }
+  for (const t of out) t.base = base;
+  const by = (s: string) => out.filter((t) => t.section === s).length;
+  (r.info ??= []).push(`${out.length} Medallia topic(s)${by('top') || by('bottom') ? ` (${by('top')} top, ${by('bottom')} bottom)` : ''}${base !== null ? ` from about ${base.toLocaleString('en-US')} comments` : ''}. Choose the division and fiscal week this export covers before importing.`);
+  if (out.some((t) => /\b(by|associate)\s+[a-z]+$/i.test(t.topic))) r.warnings.push('Some topic names include a person’s first name; they are shown as Medallia wrote them.');
+  return { topics: out, base };
+}
+
 // ───────────────────────── entry point ─────────────────────────
 export function parseFile(req: ParseRequest): ParsedFile {
   const t0 = performance.now();
@@ -692,6 +745,13 @@ export function parseFile(req: ParseRequest): ParsedFile {
       case 'appointments': result.appointments = buildAppointments(ctx, body, cand.map); break;
       case 'subscriptions': { const s = buildSubscriptions(ctx, body, cand.map, req.today ?? todayISO()); result.subscriptionWeeks = s.weeks; result.subscriptionSnapshot = s.snapshot; break; }
       case 'medallia-analytics': result.attributeWeekly = buildAnalyticsLong(ctx, body, cand.map); break;
+      case 'medallia-topics': {
+        // Topic tables can sit anywhere in the sheet (two blocks for Top/Bottom), so read the whole sheet.
+        const t = buildTopics(ctx, sheet.rows);
+        result.medalliaTopics = t.topics;
+        result.topicGuess = { ...topicGuessFromName(req.name), base: t.base };
+        break;
+      }
     }
     if (report.rowsKept === 0) report.warnings.push('No usable rows were found under the header row.');
     return { ...base, build: result, ms: performance.now() - t0 };

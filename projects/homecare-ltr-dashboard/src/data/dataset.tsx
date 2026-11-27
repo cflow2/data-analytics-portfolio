@@ -5,7 +5,7 @@ import { DEFAULT_TAXONOMY, type ThemeDef } from '@/domain/taxonomy';
 import { normalizeApptId } from '@/ingest/normalize';
 import { buildStoreDirectory } from '@/domain/geo';
 import type {
-  AppointmentRecord, AttributeWeekly, FollowUpRecord, ImportedFile, LeadershipQuestion, StoreRecord, SubscriptionSnapshot, SubscriptionWeek, SurveyRecord, ThemeTag, WeekMeta,
+  AppointmentRecord, AttributeWeekly, MedalliaTopic, FollowUpRecord, ImportedFile, LeadershipQuestion, StoreRecord, SubscriptionSnapshot, SubscriptionWeek, SurveyRecord, ThemeTag, WeekMeta,
 } from '@/domain/types';
 
 export interface Dataset {
@@ -23,6 +23,8 @@ export interface Dataset {
   tags: Map<string, ThemeTag>;
   tagList: ThemeTag[];
   attributeWeekly: AttributeWeekly[];
+  /** Medallia Text Analytics topics by week and division (comparison only) */
+  medalliaTopics: MedalliaTopic[];
   weeks: Map<number, WeekMeta>;
   files: ImportedFile[];
   taxonomy: ThemeDef[];
@@ -35,10 +37,10 @@ const Ctx = createContext<DatasetState>({ data: undefined, loading: true, error:
 /** Loads the whole (local, modest-size) dataset once and keeps it live; screens compute from memory. */
 export function DatasetProvider({ children }: { children: ReactNode }) {
   const q = useLive(async () => {
-    const [surveys, appointments, subscriptionWeeks, subscriptionSnapshots, followups, stores, tagList, attributeWeekly, weeks, files, tax, questions] = await Promise.all([
+    const [surveys, appointments, subscriptionWeeks, subscriptionSnapshots, followups, stores, tagList, attributeWeekly, weeks, files, tax, questions, medalliaTopics] = await Promise.all([
       db.surveys.toArray(), db.appointments.toArray(), db.subscriptionWeeks.toArray(), db.subscriptionSnapshots.toArray(), db.followups.toArray(), db.stores.toArray(), db.tags.toArray(),
       db.attributeWeekly.toArray(), db.weeks.toArray(), db.files.orderBy('importedAt').reverse().toArray(),
-      db.kv.get('taxonomy'), db.questions.toArray(),
+      db.kv.get('taxonomy'), db.questions.toArray(), db.medalliaTopics.toArray(),
     ]);
     const taxonomy = (tax?.value as ThemeDef[] | undefined) ?? DEFAULT_TAXONOMY;
     // RedVest Associate joined by Appointment ID (the appointment file can be loaded before or after the Tracker).
@@ -56,7 +58,7 @@ export function DatasetProvider({ children }: { children: ReactNode }) {
     // A survey without a store number takes it from its follow-up row (same survey ID).
     const fuStore = new Map(followups.filter((f) => f.surveyId && f.storeNo).map((f) => [f.surveyId!, f.storeNo]));
     for (const s of surveys) if (!s.storeNo && fuStore.has(s.id)) s.storeNo = fuStore.get(s.id)!;
-    return { surveys, appointments: byId, subscriptionWeeks, subscriptionSnapshots, associates: [...new Set(appointments.map((a) => a.associate))].sort(), followups, stores, tagList, attributeWeekly, weeks, files, taxonomy, questions };
+    return { surveys, appointments: byId, subscriptionWeeks, subscriptionSnapshots, associates: [...new Set(appointments.map((a) => a.associate))].sort(), followups, stores, tagList, attributeWeekly, weeks, files, taxonomy, questions, medalliaTopics };
   }, []);
   const data = useMemo<Dataset | undefined>(() => q.data && {
     ...q.data,

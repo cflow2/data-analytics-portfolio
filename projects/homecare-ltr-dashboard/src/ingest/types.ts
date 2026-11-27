@@ -62,6 +62,9 @@ export interface BuildResult {
   subscriptionSnapshot?: import('@/domain/types').SubscriptionSnapshot | null;
   /** Appointment file: Appointment ID → RedVest Associate */
   appointments?: import('@/domain/types').AppointmentRecord[];
+  /** Medallia Text Analytics topics; division and week are set on import (guessed from the file name when it has them) */
+  medalliaTopics?: import('@/domain/types').MedalliaTopic[];
+  topicGuess?: TopicMeta & { base: number | null };
   /** Medallia Analytics only: the whole-range LTR (e.g. a fiscal-year-to-date view) */
   medalliaRange?: MedalliaRange | null;
 }
@@ -81,6 +84,9 @@ export interface MedalliaRange {
   openEnd?: { lastStartFw: number };
   sourceFile: string;
 }
+
+/** Which division and fiscal week a Medallia topics export covers (Medallia doesn't write either into the file). */
+export interface TopicMeta { division?: string; fw?: number }
 
 export interface ParseRequest {
   fileId: string;

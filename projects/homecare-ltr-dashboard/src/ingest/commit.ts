@@ -3,7 +3,8 @@ import { db as defaultDb, type HomeCareDB } from '@/db/db';
 import { countsForLtr } from '@/domain/survey';
 import type { FollowUpRecord, OriginalText, StoreRecord, SurveyRecord } from '@/domain/types';
 import { normalizeApptId, textKey } from './normalize';
-import type { FollowUpCheck, ParsedFile, ValidationReport } from './types';
+import type { FollowUpCheck, ParsedFile, TopicMeta, ValidationReport } from './types';
+import { surveyDivision } from '@/analytics/ltr';
 
 export async function lockedWeeks(database: HomeCareDB = defaultDb): Promise<Set<number>> {
   return new Set((await database.weeks.toArray()).filter((w) => w.locked).map((w) => w.fw));
@@ -57,7 +58,11 @@ function linkFollowups(fus: FollowUpRecord[], surveys: SurveyRecord[]) {
   }
 }
 
-export interface CommitOptions { database?: HomeCareDB }
+export interface CommitOptions {
+  database?: HomeCareDB;
+  /** Medallia topics export: the division and fiscal week it covers (chosen on the file card) */
+  topicMeta?: TopicMeta;
+}
 
 export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {}): Promise<ValidationReport> {
   const database = opts.database ?? defaultDb;
@@ -225,6 +230,24 @@ export async function commitParsed(parsed: ParsedFile, opts: CommitOptions = {})
     const withAppt = (await database.surveys.toArray()).filter((s) => countsForLtr(s) && s.appointmentId);
     report.associateLinks = { linked: withAppt.filter((s) => ids.has(normalizeApptId(s.appointmentId))).length, withAppointment: withAppt.length };
     if (withAppt.length) (report.info ??= []).push(`Linked ${report.associateLinks.linked.toLocaleString('en-US')} of ${withAppt.length.toLocaleString('en-US')} loaded surveys to an associate.`);
+  }
+  if (b.medalliaTopics) {
+    // One export per division and fiscal week: a re-import replaces that division's week.
+    const fw = opts.topicMeta?.fw, division = opts.topicMeta?.division;
+    if (!fw || !division) throw new Error('Choose the division and fiscal week this Medallia topics export covers.');
+    const rows = b.medalliaTopics.map((t) => ({ ...t, fw, division, id: `${fw}:${division}:${t.section}:${t.topic}` }));
+    await database.medalliaTopics.where('fw').equals(fw).filter((t) => t.division === division).delete();
+    await database.medalliaTopics.bulkPut(rows);
+    report.weeks = { [fw]: rows.length };
+    // Cross-check: Medallia's comment count vs HomeCare+ Tracker surveys with a comment for the same week and division.
+    const base = rows[0]?.base ?? null;
+    const app = (await database.surveys.where('fw').equals(fw).toArray())
+      .filter((x) => countsForLtr(x) && x.comment.trim() && (division === 'ALL' || surveyDivision(x) === division)).length;
+    const label = division === 'ALL' ? 'all divisions' : division.charAt(0) + division.slice(1).toLowerCase();
+    if (base !== null && app > 0) {
+      const off = Math.abs(base - app) / app;
+      (off > 0.25 ? report.warnings : (report.info ??= [])).push(`FW${fw} ${label}: Medallia counted about ${base.toLocaleString('en-US')} comments; the app has ${app.toLocaleString('en-US')} HomeCare+ surveys with a comment.${off > 0.25 ? ' That’s far apart: check the export’s Survey Program, Division, dates and Topic filter.' : ''}`);
+    } else if (base !== null) (report.info ??= []).push(`FW${fw} ${label}: Medallia counted about ${base.toLocaleString('en-US')} comments. Load the Tracker for FW${fw} to compare.`);
   }
   if (b.regionMap) await database.kv.put({ key: 'regionMap', value: b.regionMap });
   if (b.medalliaRange) await database.kv.put({ key: `medalliaRange:${b.medalliaRange.id}`, value: { ...b.medalliaRange, importedAt: new Date().toISOString() } });

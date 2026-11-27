@@ -15,7 +15,7 @@ export function demoDataset(): Dataset {
   return {
     surveys: d.surveys, subscriptionWeeks: d.subscriptionWeeks, subscriptionSnapshots: d.subscriptionSnapshots, associates: [...new Set(d.appointments.map((a) => a.associate))].sort(), appointments: new Map(d.appointments.map((a) => [a.id, a])), followups: d.followups,
     stores: new Map(d.stores.map((s) => [s.storeNo, s])), tags: new Map(tags.map((t) => [t.recordId, t])), tagList: tags,
-    attributeWeekly: [], weeks: new Map(d.weeks.map((w) => [w.fw, w])), files: [],
+    attributeWeekly: [], medalliaTopics: d.medalliaTopics, weeks: new Map(d.weeks.map((w) => [w.fw, w])), files: [],
     taxonomy: DEFAULT_TAXONOMY, questions: d.questions,
   };
 }

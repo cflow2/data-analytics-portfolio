@@ -77,6 +77,7 @@ Drop any mix of files on **Data Manager**. Each one is read in a Web Worker, so 
 | Store→District CSV | `Store #, Store Name, City, State, District, Region` | Also uploadable from Settings. |
 | HomeCare+ subscription export (`data - <timestamp>.xlsx`, sheet *Export*) | `Store, Week, Net MLRHC+ Subscriptions, Net MLRHC+ Store Subscriptions` (+ online, revenue, store set, division, region, district, Completed Appointments, Regular, Assessments, Follow UP, Exceptions, Follow Up Required) | One row per store per fiscal week, year to date; the trailing "Applied filters" row is skipped. Each upload replaces that fiscal year's weeks **and saves a snapshot** of the current and prior week by store. The export time in the file name sets the snapshot's *data-through* date (the day before). Upload it every morning: yesterday's sales = this snapshot's week-to-date minus the previous one; "same point last week" = the snapshot from 7 days earlier. |
 | Appointment file (RedVest Associate) | `Appointment ID` + `Associate` required; `Job ID`, `Store #`, `Appointment date`, `Customer Name` (or `First Name` + `Last Name`) and `Customer Phone` optional (common names such as *Appt ID*, *Technician Name*, *Job #*, *Service Date* are recognised; otherwise map the columns once) | Links each survey to its associate by Appointment ID, whichever file is loaded first. The report says how many loaded surveys were linked. If one Appointment ID lists two associates, the first is kept and the conflict is reported. Customer name, phone and Job ID are used only by **Email SM** on the Detractors screen. |
+| Medallia Text Analytics topics (one per division per week) | “Top and Bottom Topics” export: topic name in column A, `Impact Score`, `# of Responses`, `% of Responses`, `# Positive`, `# Negative` (header found automatically; both Top and Bottom blocks are read) | Medallia doesn’t write the division or dates into the file, so the file card asks for **Division** and **Fiscal week** (defaults to the latest week ended; Friday counts). Names like `Topics FW43 WEST.xlsx` fill both in. Re-importing a division’s week replaces it. The report compares Medallia’s comment count with the HomeCare+ Tracker surveys that have a comment for that division and week. |
 
 Headers are matched fuzzily (case, spaces, curly quotes). If a required column isn't found, the **column-mapping dialog** opens; the mapping is remembered for future uploads. Re-uploading a file never duplicates records (deterministic IDs). **Locked weeks are read-only**: no imports or deletes, no tag overrides, root-cause edits, notes, headline or slide edits (exports still work; untagged records still get their first rule tags).
 
@@ -118,6 +119,35 @@ Every survey that scores 0–8 costs 100 ÷ n points of LTR (0.5 pts when n = 20
 ## Services members want added
 
 **VOC Themes → Services members want added** ranks services outside the standard visit (tankless and gas water heaters, roof-vented dryer vents, second-story work, gutters, light fixtures, garage doors, detectors…) by how many members mention them. A mention only counts when the comment asks for the service or says it wasn't covered (or is tagged Service-add or Exclusions), so “they changed my HVAC filter” doesn't count. It shows asked-to-add vs told-not-covered, this week, % that still scored 9–10, and when it was last seen, for FYTD, 13 weeks or the week. Click a service for its comments; the table exports to CSV/Excel. The service list lives in `src/analytics/serviceRequests.ts`.
+
+## Medallia topics (VOC Themes)
+
+The VOC Themes screen shows Medallia's own topic tags on the HomeCare+ comment for the week, next to the app's themes. Each week, export three files, one each for North, South and West.
+
+**How to export** (Advanced Reporting › **Text Analytics**, not Topic Deep Dive):
+- **Dates:** the fiscal week, Saturday–Friday.
+- **Time Split:** Months.
+- **Reporting Date:** Response date (Pacific Time).
+- **Survey Program:** MyLowe's Rewards HomeCare+.
+- **Division:** one per run.
+- **Question:** Combined Scale Field.
+- **Calculation:** Top 2 Box.
+- **Benchmark:** All Units.
+- **Topics to Display:** Level 2.
+- **Comment Field:** "Comment – Homecare+ Score Reason", set in both the topics and the themes sections.
+- **Export:** Top and Bottom Topics.
+
+**What the panel shows:**
+- For each division: Medallia's comment count next to the app's count (they should be close).
+- Topics that are negative in more than one division.
+- For each topic: Medallia's impact on LTR, comment count, positive and negative, and the closest app theme with how many of the week's comments the app tagged with it.
+
+**Flags:**
+- **Not an app theme:** Medallia has 3+ negative comments on a topic the app's themes don't cover.
+- **App found none:** the app has a matching theme but tagged none of that week's comments with it.
+- **Too few:** a topic with fewer than 3 comments. It's greyed out.
+
+The panel follows the Division filter, and **All loaded** shows every division together. It's a comparison only; LTR always comes from the Tracker. The topic → theme mapping is in `src/analytics/medalliaTopics.ts`.
 
 ## Email the store manager (Detractors)
 
